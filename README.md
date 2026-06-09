@@ -2,6 +2,37 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
+## What Problem Does This Solve
+
+When you use both Claude Code and Codex on the same project (or switch between them day to day), you hit the same three traps over and over. This kit exists to close them.
+
+**Trap 1: Each agent does its own thing, and the styles clash.**
+On the same project, Claude might love writing tests while Codex loves refactoring — different naming, different flow — and the code gets messier with every change.
+The fix is to write the rules into one file in the repo that everyone can see (`AGENTS.md`). Whichever agent shows up reads this "contract" first and works to the same standard.
+> Like two contractors taking over your project: instead of explaining the rules out loud every time, you post a single "Project Handbook" on the wall, and everyone reads it before starting.
+
+**Trap 2: Trusting stale docs and building on the wrong thing.**
+The docs say "the login endpoint is `/api/login`," but the code was changed to `/api/v2/auth` long ago. An agent that trusts the docs instead of reading the code writes against the wrong target.
+The fix is to require checking the current code, config, and tests before acting — treating the real present state as truth, not old docs or memory.
+
+**Trap 3: Doing half the job, then calling it "done."**
+The most common failure — it runs locally, nothing errors, ship it. But the data was never saved, the page never renders it, the docs were never updated, and the actual user path is broken end to end.
+The fix is to require that one change connects **feature, logic, data, UI, and docs** together before it counts as done.
+
+Take "add a `nickname` field to the user" as an example:
+
+| Loop | Half done (the common failure) | Closed loop (what should happen) |
+| --- | --- | --- |
+| Feature | Added the input box | Added the input box |
+| Logic | No save logic | Submitting actually persists it |
+| Data | Column never added to the DB | Field added, reads and writes work |
+| UI | Profile page doesn't show it | Shown everywhere it should be |
+| Docs | API docs still old | Docs updated in sync |
+
+In one line: **don't let different agents freelance (unify the rules with a contract), don't trust stale docs (the current code wins), and don't ship half a job (it's done only when everything from UI to data to docs is wired together).**
+
+---
+
 This repository is a reusable template for projects that are worked on by both Claude Code and Codex.
 
 The design goal is not to make a larger project encyclopedia. It is to make agents work from the same contract, verify current facts before acting, and close feature, logic, UI, data, and documentation loops.
