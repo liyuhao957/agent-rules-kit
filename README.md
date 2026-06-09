@@ -60,6 +60,13 @@ agent starts in a project
 
 Rules should grow from verified evidence, not from old docs, memory, or filenames alone.
 
+The kit does not require two agents or an existing codebase:
+
+- **One agent is enough.** `AGENTS.md` governs any single agent on its own, and `CLAUDE.md` only imports it. Use just Claude or just Codex — the other agent's files stay installed but unused, which is harmless and keeps validation passing.
+- **Greenfield is fine.** Install from the first commit. Rules start generic and adapt as real code appears, instead of being retrofitted onto a mature codebase.
+
+Install steps for both cases are under [Common Usage Patterns](#common-usage-patterns).
+
 ## Layout
 
 ```text
@@ -158,6 +165,33 @@ Expected result:
 - The agent adapts `.agent/*` from actual code/config.
 - Strict validation passes.
 - Future agents can start from `AGENTS.md` instead of rediscovering the project from zero.
+
+### Single Agent (Claude-Only Or Codex-Only)
+
+The kit is built for both agents but does not require both. Install the normal way:
+
+```bash
+/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
+```
+
+Then:
+
+- The installer always writes both agents' files (`.claude/` and `.agents/` + `.codex/`). There is no per-agent install flag, and you should not delete the unused set — `validate-installed-project.sh` checks that both exist.
+- Use only your agent; the other agent's files sit unused and harmless. Everything that matters lives in the shared `AGENTS.md` and `.agent/*`, which both agents read the same way.
+- Wire up hooks for your agent only (optional):
+  - Claude: `cp .claude/settings.example.json .claude/settings.json`
+  - Codex: `cp .codex/hooks.example.json .codex/hooks.json`
+- Claude-only also gains subagents under `.claude/agents/` (reviewer, qa, docs-drift-checker). Codex-only keeps every skill, hook, and workflow except those subagents.
+
+### Brand-New Or Empty Repository
+
+You can install from the very first commit; the kit does not assume an existing or mature codebase.
+
+- Bootstrap runs even with no source code: it reports `none detected`, writes empty candidate lists, and still exits cleanly. No git history is required.
+- After install, rules are generic and `.agent/adaptation-review.md` says `Status: pending`. With little code to verify against, adaptation is light — the agent mainly confirms product intent with you, marks high-risk unknowns as `needs-user`, then sets `Status: adapted`.
+- As real code lands, drift checks and rule candidates grow the rules from verified evidence. Greenfield is the ideal time to install, because the rules grow with the project instead of being retrofitted later.
+
+The agent-first command above works here too. For a pure shell install without an agent, use the [low-level command](#low-level-install-command) with `--bootstrap`.
 
 ### Existing Project With Old Rules
 

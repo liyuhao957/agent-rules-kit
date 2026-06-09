@@ -60,6 +60,13 @@
 
 规则应当从核实过的证据里长出来，而不是只凭旧文档、记忆或文件名。
 
+这套工具既不要求你同时用两个 agent，也不要求项目里已经有代码：
+
+- **一个 agent 就够。** `AGENTS.md` 单独就能约束任意一个 agent，`CLAUDE.md` 只是把它导进来。只用 Claude 或只用 Codex 都行——另一个 agent 的文件照样会装上，但放着不用即可，既不影响使用，也能让校验通过。
+- **全新项目也行。** 从第一个提交就能装。规则一开始是通用的，再随着真实代码出现逐步适配，而不是事后硬塞给一个已经成型的库。
+
+这两种情况的具体安装步骤见下方[常见用法](#常见用法)。
+
 ## 目录结构
 
 ```text
@@ -158,6 +165,33 @@ git clone https://github.com/liyuhao957/agent-rules-kit.git
 - 智能体依据真实的代码、配置适配 `.agent/*`。
 - 严格校验通过。
 - 后续的智能体可以直接从 `AGENTS.md` 起步，而不必从零重新摸清项目。
+
+### 单 agent（只用 Claude 或只用 Codex）
+
+这套工具是为两个 agent 设计的，但并不要求两个都用。照常安装即可：
+
+```bash
+/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
+```
+
+然后：
+
+- 安装器总会同时写入两个 agent 的文件（`.claude/` 和 `.agents/` + `.codex/`）。没有「只装某一个 agent」的选项，也不要删掉用不到的那一套——`validate-installed-project.sh` 会检查两套都在。
+- 只用你的那个 agent 就行，另一套文件放着不用、互不干扰。真正起作用的是共享的 `AGENTS.md` 和 `.agent/*`，两个 agent 读到的是同一份。
+- 只给你自己的 agent 接钩子（可选）：
+  - Claude：`cp .claude/settings.example.json .claude/settings.json`
+  - Codex：`cp .codex/hooks.example.json .codex/hooks.json`
+- 只用 Claude 还会多出 `.claude/agents/` 下的子智能体（reviewer、qa、docs-drift-checker）；只用 Codex 则保留全部技能、钩子和工作流，只是没有这几个子智能体。
+
+### 全新或空白仓库
+
+从第一个提交就能装；这套工具不假设你已经有一个成型或成熟的代码库。
+
+- 即使没有任何源码，引导扫描也能跑：它会输出 `none detected`、写入空的候选列表，并正常结束，不需要 git 历史。
+- 安装后规则还是通用的，`.agent/adaptation-review.md` 标的是 `Status: pending`。由于几乎没有代码可核实，适配会很轻——agent 主要是跟你确认产品意图，把高风险的未知项标成 `needs-user`，然后把状态改成 `adapted`。
+- 随着真实代码落地，漂移检查和规则候选会让规则从核实过的证据里长出来。全新项目其实是最适合安装的时机，因为规则是随项目一起生长的，而不是事后再补。
+
+上面那条「智能体优先」命令在这里同样适用。如果想纯用 shell、不经过 agent 安装，用[底层安装命令](#底层安装命令)加上 `--bootstrap`。
 
 ### 已有旧规则的项目
 
