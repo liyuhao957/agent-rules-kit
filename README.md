@@ -71,12 +71,20 @@ templates/project/
 
 ## Recommended Agent-First Flow
 
+First, clone this kit somewhere on your machine:
+
+```bash
+git clone https://github.com/liyuhao957/agent-rules-kit.git
+```
+
+In the commands below, `/path/to/agent-rules-kit` is wherever you cloned this kit, and `/path/to/project` is the target project you are installing into.
+
 Do not treat a direct shell install as complete project setup. The ideal flow is:
 
 1. Start Claude Code or Codex in the target project.
 2. Ask the agent:
 
-   > Install and adapt `/Users/ct/code/Rules` for this project.
+   > Install and adapt `/path/to/agent-rules-kit` for this project.
    > If this project already has `AGENTS.md` or `CLAUDE.md`, back them up first.
    > Old rules, Claude memory, Codex memory, handoffs, and summaries are clues only, not facts.
    > Promote only facts verified from current code, config, tests, docs, or tool output into `.agent/*`.
@@ -86,7 +94,7 @@ Do not treat a direct shell install as complete project setup. The ideal flow is
 3. The agent runs:
 
 ```bash
-/Users/ct/code/Rules/scripts/agent-install-rules.sh --target /path/to/project
+/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
 ```
 
 4. The agent follows `.agent/workflows/adapt-rules.md`, reads current code/config/docs, reviews old backups if present, and writes verified project facts into `.agent/*`.
@@ -95,13 +103,13 @@ Do not treat a direct shell install as complete project setup. The ideal flow is
 7. The agent verifies:
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
 For an existing project that already has agent rules:
 
 ```bash
-/Users/ct/code/Rules/scripts/agent-install-rules.sh --target /path/to/project --force
+/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --force
 ```
 
 Old rule files are backed up under `.rules-kit/backups/rules-install-<timestamp>/` and must be read as clues during adaptation.
@@ -232,7 +240,7 @@ Strict validation checks that:
 Use:
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
 ### 5. Work
@@ -313,19 +321,19 @@ Recommended version-control policy:
 This lower-level command only installs templates and optional bootstrap candidates. It does not adapt rules to the project by itself.
 
 ```bash
-/Users/ct/code/Rules/scripts/install-rules.sh --target /path/to/project --bootstrap
+/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --bootstrap
 ```
 
 If the project already has `AGENTS.md`, `CLAUDE.md`, `.agent`, `.agents`, `.claude`, or `.codex`, the installer refuses to overwrite by default. To replace them safely:
 
 ```bash
-/Users/ct/code/Rules/scripts/install-rules.sh --target /path/to/project --force
+/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --force
 ```
 
 For existing projects, use both:
 
 ```bash
-/Users/ct/code/Rules/scripts/install-rules.sh --target /path/to/project --force --bootstrap
+/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --force --bootstrap
 ```
 
 Existing rule files are backed up under:
@@ -352,19 +360,19 @@ After low-level install, an agent still needs to follow `.agent/workflows/adapt-
 Validate an installed project:
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project
 ```
 
 Validate that a project has been agent-adapted, not only installed:
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
 If you installed without `--bootstrap`, run:
 
 ```bash
-/Users/ct/code/Rules/scripts/bootstrap-project.sh /path/to/project
+/path/to/agent-rules-kit/scripts/bootstrap-project.sh /path/to/project
 ```
 
 Add this to the target project's `.gitignore` if you want handoff notes to stay local:

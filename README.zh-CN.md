@@ -71,12 +71,20 @@ templates/project/
 
 ## 推荐的「智能体优先」流程
 
+先把这套工具 clone 到你机器上的任意位置：
+
+```bash
+git clone https://github.com/liyuhao957/agent-rules-kit.git
+```
+
+下文命令里的 `/path/to/agent-rules-kit` 指你 clone 下来的这套工具所在的位置，`/path/to/project` 指你要安装进去的目标项目。
+
 别把一条直接的 shell 安装命令当成完整的项目配置。理想的流程是：
 
 1. 在目标项目里启动 Claude Code 或 Codex。
 2. 给智能体下达这样的指令：
 
-   > 为这个项目安装并适配 `/Users/ct/code/Rules`。
+   > 为这个项目安装并适配 `/path/to/agent-rules-kit`。
    > 如果项目里已经有 `AGENTS.md` 或 `CLAUDE.md`，先备份。
    > 旧规则、Claude 记忆、Codex 记忆、交接记录和历史总结都只是线索，不是事实。
    > 只把能从当前代码、配置、测试、文档或工具输出中核实的事实写入 `.agent/*`。
@@ -86,7 +94,7 @@ templates/project/
 3. 智能体执行：
 
 ```bash
-/Users/ct/code/Rules/scripts/agent-install-rules.sh --target /path/to/project
+/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
 ```
 
 4. 智能体按 `.agent/workflows/adapt-rules.md` 操作：阅读当前代码、配置、文档，复查可能存在的旧备份，把核实过的项目事实写进 `.agent/*`。
@@ -95,13 +103,13 @@ templates/project/
 7. 智能体做最终校验：
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
 如果项目里已经有一套智能体规则，使用：
 
 ```bash
-/Users/ct/code/Rules/scripts/agent-install-rules.sh --target /path/to/project --force
+/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --force
 ```
 
 旧规则文件会被备份到 `.rules-kit/backups/rules-install-<timestamp>/`，并且在适配时必须当作线索来读。
@@ -232,7 +240,7 @@ Claude Code 或 Codex 按 `.agent/workflows/adapt-rules.md` 操作。
 使用：
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
 ### 5. 日常开发
@@ -313,19 +321,19 @@ Claude Code 或 Codex 按 `.agent/workflows/adapt-rules.md` 操作。
 这条更底层的命令只安装模板和可选的引导扫描候选，它本身不会把规则适配到项目。
 
 ```bash
-/Users/ct/code/Rules/scripts/install-rules.sh --target /path/to/project --bootstrap
+/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --bootstrap
 ```
 
 如果项目里已经有 `AGENTS.md`、`CLAUDE.md`、`.agent`、`.agents`、`.claude` 或 `.codex`，安装器默认拒绝覆盖。要安全替换：
 
 ```bash
-/Users/ct/code/Rules/scripts/install-rules.sh --target /path/to/project --force
+/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --force
 ```
 
 对已有项目，两个参数一起用：
 
 ```bash
-/Users/ct/code/Rules/scripts/install-rules.sh --target /path/to/project --force --bootstrap
+/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --force --bootstrap
 ```
 
 已有的规则文件会备份到：
@@ -352,19 +360,19 @@ Claude Code 或 Codex 按 `.agent/workflows/adapt-rules.md` 操作。
 校验一个已安装的项目：
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project
 ```
 
 校验一个项目是否已被智能体适配（而不仅仅是安装）：
 
 ```bash
-/Users/ct/code/Rules/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
 如果安装时没带 `--bootstrap`，再运行：
 
 ```bash
-/Users/ct/code/Rules/scripts/bootstrap-project.sh /path/to/project
+/path/to/agent-rules-kit/scripts/bootstrap-project.sh /path/to/project
 ```
 
 如果你想让交接笔记只留在本地，把下面这段加进目标项目的 `.gitignore`：
