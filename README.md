@@ -2,510 +2,207 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-## What Problem Does This Solve
+A shared, plain-markdown contract so that whichever agent touches your project — Claude Code, Codex, or you — follows the same rules, verifies facts from the current code instead of stale docs, and finishes the whole job instead of half of it.
 
-When you use both Claude Code and Codex on the same project (or switch between them day to day), you hit the same three traps over and over. This kit exists to close them.
+No runtime, no dependencies. Just markdown the agent reads, plus three small helper scripts.
 
-**Trap 1: Each agent does its own thing, and the styles clash.**
-On the same project, Claude might love writing tests while Codex loves refactoring — different naming, different flow — and the code gets messier with every change.
-The fix is to write the rules into one file in the repo that everyone can see (`AGENTS.md`). Whichever agent shows up reads this "contract" first and works to the same standard.
-> Like two contractors taking over your project: instead of explaining the rules out loud every time, you post a single "Project Handbook" on the wall, and everyone reads it before starting.
+## The three traps it closes
 
-**Trap 2: Trusting stale docs and building on the wrong thing.**
-The docs say "the login endpoint is `/api/login`," but the code was changed to `/api/v2/auth` long ago. An agent that trusts the docs instead of reading the code writes against the wrong target.
-The fix is to require checking the current code, config, and tests before acting — treating the real present state as truth, not old docs or memory.
+Whether it's one agent across many sessions or a couple of them taking turns, the same three failures keep showing up on a real project.
 
-**Trap 3: Doing half the job, then calling it "done."**
-The most common failure — it runs locally, nothing errors, ship it. But the data was never saved, the page never renders it, the docs were never updated, and the actual user path is broken end to end.
-The fix is to require that one change connects **feature, logic, data, UI, and docs** together before it counts as done.
+**Trap 1 — Every fresh start reinvents how the project works.**
+A new session opens the repo cold, with no reliable memory of earlier decisions, so it guesses at conventions, picks different names, and re-derives how things are done. It happens whether the next session is the same agent, the other agent, or you next month — two Claude sessions diverge as easily as Claude and Codex do. Multiply it over time and the codebase splinters.
+*Fix:* write the durable decisions into one file in the repo that everyone reads first (`AGENTS.md`). Whoever picks up the work next starts from the same standard instead of guessing.
+> Like a job site where nobody writes anything down: every crew — even the same one back next week — reinvents how the work gets done. Pin one "site handbook" to the wall and everyone builds the same way.
 
-Take "add a `nickname` field to the user" as an example:
+**Trap 2 — Trusting stale docs and building on the wrong thing.**
+The doc says the login endpoint is `/api/login`, but the code moved to `/api/v2/auth` months ago. An agent that believes the doc writes against a target that no longer exists.
+*Fix:* check the current code, config, and tests before acting. The real present state wins over old docs and memory.
 
-| Loop | Half done (the common failure) | Closed loop (what should happen) |
+**Trap 3 — Doing half the job, then calling it "done."**
+The classic: it runs locally, nothing errors, ship it. But the data never saved, the page never showed it, the docs were never updated — and the actual user path is broken end to end.
+*Fix:* a change isn't done until **feature, logic, data, UI, and docs** are wired together.
+
+Take "add a `nickname` field to the user":
+
+| Loop | Half done (the usual) | Closed loop (done) |
 | --- | --- | --- |
-| Feature | Added the input box | Added the input box |
+| Feature | Input box added | Input box added |
 | Logic | No save logic | Submitting actually persists it |
-| Data | Column never added to the DB | Field added, reads and writes work |
-| UI | Profile page doesn't show it | Shown everywhere it should be |
-| Docs | API docs still old | Docs updated in sync |
+| Data | Column never added | Field added; reads and writes work |
+| UI | Profile page ignores it | Shown everywhere it should be |
+| Docs | API doc still old | Doc updated in step |
 
-In one line: **don't let different agents freelance (unify the rules with a contract), don't trust stale docs (the current code wins), and don't ship half a job (it's done only when everything from UI to data to docs is wired together).**
+**In one line:** don't let every session freelance (one shared contract), don't trust stale docs (current code wins), and don't ship half a feature (UI → logic → data → docs all wired up).
 
----
+## What it actually is
 
-This repository is a reusable template for projects that are worked on by both Claude Code and Codex.
+Be honest about the weight: this is **not a framework, an engine, or a runtime.** It's a folder of files you copy into your repo:
 
-The design goal is not to make a larger project encyclopedia. It is to make agents work from the same contract, verify current facts before acting, and close feature, logic, UI, data, and documentation loops.
+- `AGENTS.md` — the shared contract every agent reads first.
+- `CLAUDE.md` — a thin Claude Code entrypoint that just imports `AGENTS.md`.
+- `.agent/` — a set of short markdown files: product promises, user journeys, verified commands, per-domain rules, and the project's source-of-truth policy. Most start as templates the agent fills in from your real code.
+- Skill and hook stubs for both Claude Code and Codex that point them at the shared `.agent/` rules.
+- Three small Python scripts (standard library only, **no dependencies** — they even hand-roll their YAML parsing to avoid one) that scan the repo and **write suggestions**. They never edit your rules.
 
-## What This Kit Does
+**The division of labor is the whole point: the agent is the judge; the scripts only collect evidence and flag what might be stale.** Nothing in here decides anything on its own.
 
-This kit gives Claude Code and Codex one shared project operating system:
+It works with **one agent or two**, and from **commit zero** — you don't need both Claude and Codex, and you don't need an existing codebase. See [Install](#install).
 
-- A short shared entrypoint: `AGENTS.md`.
-- A Claude Code entrypoint that imports the same contract: `CLAUDE.md`.
-- Shared project rules under `.agent/`.
-- Codex and Claude Code skills/hooks that load the shared rules at the right time.
-- Scripts that install, bootstrap, validate, detect drift, and generate rule-maintenance candidates.
-
-The important idea is:
-
-```text
-agent starts in a project
-  -> installs Rules
-  -> scans current repo evidence
-  -> adapts generic rules into verified project rules
-  -> develops/reviews using those rules
-  -> updates rules when durable project facts change
-```
-
-Rules should grow from verified evidence, not from old docs, memory, or filenames alone.
-
-The kit does not require two agents or an existing codebase:
-
-- **One agent is enough.** `AGENTS.md` governs any single agent on its own, and `CLAUDE.md` only imports it. Use just Claude or just Codex — the other agent's files stay installed but unused, which is harmless and keeps validation passing.
-- **Greenfield is fine.** Install from the first commit. Rules start generic and adapt as real code appears, instead of being retrofitted onto a mature codebase.
-
-Install steps for both cases are under [Common Usage Patterns](#common-usage-patterns).
-
-## Layout
-
-```text
-templates/project/
-  AGENTS.md                 Shared entrypoint for Codex and other agents
-  CLAUDE.md                 Claude Code entrypoint that imports AGENTS.md
-  .agent/                   Shared project protocol and quality standards
-  .agents/skills/           Codex skills that load shared .agent protocols
-  .claude/skills/           Claude Code skills that load shared .agent protocols
-  .claude/agents/           Claude Code subagent templates
-  .claude/hooks/            Claude Code hook scripts (lifecycle reminders/guards)
-  .codex/hooks/             Codex hook scripts (lifecycle reminders/guards)
-  .codex/hooks.example.json Codex hook example
-  .claude/settings.example.json Claude Code hook/settings example
-```
-
-## File Responsibilities
-
-| Path | Purpose | Who uses it |
-| --- | --- | --- |
-| `AGENTS.md` | Shared, short project entrypoint and source-of-truth policy. | Codex, Claude Code through `CLAUDE.md`, other agents |
-| `CLAUDE.md` | Thin Claude Code entrypoint that imports `@AGENTS.md`. | Claude Code |
-| `.agent/index.md` | Routes agents to the right workflow/domain docs. | Both agents |
-| `.agent/source-of-truth.md` | Defines what counts as proof and what must be rechecked. | Both agents |
-| `.agent/adaptation-review.md` | Says whether installed rules are still generic or already adapted to this project. | Both agents |
-| `.agent/product-invariants.md` | Durable product promises that future work should preserve. | Both agents |
-| `.agent/user-journeys.md` | Main user flows and expected loop closure. | Both agents |
-| `.agent/domains/*` | Focused rules for UI/copy, data/sync, build/test, release, localization, performance. | Both agents |
-| `.agent/command-contract.md` | Verified commands plus generated command candidates. | Both agents |
-| `.agent/drift-map.yml` | Maps changed code paths to docs that may need review. | Drift scripts and agents |
-| `.agent/rule-candidates.md` | Automatic-growth inbox. Scripts add candidates; agents decide outcomes. | Both agents |
-| `.agent/project-map.md` | Generated map from current repo files/config. It is a clue, not final truth. | Both agents |
-| `.agent/bootstrap-report.md` | Generated bootstrap summary, old-rule clues, and adaptation TODOs. | Both agents |
-| `.agents/skills/*` | Codex skill wrappers that load `.agent` workflows. | Codex |
-| `.claude/skills/*`, `.claude/agents/*`, `.claude/hooks/*` | Claude Code-specific loaders and reminders. | Claude Code |
-| `.codex/hooks.example.json` | Optional Codex hook configuration example. | Codex |
-| `scripts/bootstrap-project-context.py` | Scans repo evidence and refreshes generated maps/candidates. | Agents |
-| `scripts/check-doc-drift.py` | Reports which docs may need review after code changes. | Agents/hooks |
-| `scripts/suggest-rule-updates.py` | Generates rule candidates from diffs, command candidates, old backups, and risk signals. | Agents/hooks |
-
-## Recommended Agent-First Flow
-
-First, clone this kit somewhere on your machine:
+## Quickstart
 
 ```bash
+# 1. Clone the kit somewhere on your machine
 git clone https://github.com/liyuhao957/agent-rules-kit.git
-```
 
-In the commands below, `/path/to/agent-rules-kit` is wherever you cloned this kit, and `/path/to/project` is the target project you are installing into.
-
-Do not treat a direct shell install as complete project setup. The ideal flow is:
-
-1. Start Claude Code or Codex in the target project.
-2. Ask the agent:
-
-   > Install and adapt `/path/to/agent-rules-kit` for this project.
-   > If this project already has `AGENTS.md` or `CLAUDE.md`, back them up first.
-   > Old rules, Claude memory, Codex memory, handoffs, and summaries are clues only, not facts.
-   > Promote only facts verified from current code, config, tests, docs, or tool output into `.agent/*`.
-   > Put unverified or high-risk facts in `needs-user`; do not ask the user about ordinary candidates.
-   > Mark `.agent/adaptation-review.md` as adapted and pass strict validation.
-
-3. The agent runs:
-
-```bash
+# 2. In your project, tell the agent (Claude Code or Codex):
+#    "Install and adapt /path/to/agent-rules-kit for this project."
+#    It runs:
 /path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
 ```
 
-4. The agent follows `.agent/workflows/adapt-rules.md`, reads current code/config/docs, reviews old backups if present, and writes verified project facts into `.agent/*`.
-5. The agent runs `python3 scripts/suggest-rule-updates.py` and handles every `.agent/rule-candidates.md` item by promoting, checking unchanged, rejecting, or marking `needs-user`.
-6. The agent marks `.agent/adaptation-review.md` as `Status: adapted`.
-7. The agent verifies:
+The installer copies the files and scans your repo for clues. Then the agent reads your actual code and **fills the templates in with verified facts** — that part is the agent's work, not the script's. From then on, any agent starts from `AGENTS.md` instead of rediscovering the project from scratch.
 
-```bash
-/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+## What "adapted" looks like
+
+Right after install, the rule files are generic templates and `.agent/adaptation-review.md` says `Status: pending`. The agent's job is to turn them into real, verified project facts. For example:
+
+```text
+Before (template)            After (agent filled in, verified from real code)
+─────────────────            ───────────────────────────────────────────────
+product-invariants.md        Free tier is capped at 3 projects.
+  <durable promise>          Deleting an account purges synced data within 24h.
+
+user-journeys.md             Sign up → verify email → create first project →
+  <main flow>                land on dashboard.
+
+command-contract.md          Test:  npm test       (ran it, passes)
+  <verified command>         Build: npm run build  (ran it, succeeds)
 ```
 
-For an existing project that already has agent rules:
+Whatever the agent **can't** prove from code, tests, or tools — live billing state, production config, credentials — does not get promoted. It goes under `needs-user` in `.agent/adaptation-review.md` for you to confirm. Guessing is not allowed.
+
+## How it stays honest as the code changes
+
+This is the one mechanism that keeps the rules from rotting. After a non-trivial change, the agent runs:
+
+```bash
+python3 scripts/check-doc-drift.py       # reports which docs the change may have made stale
+python3 scripts/suggest-rule-updates.py  # writes candidates into .agent/rule-candidates.md
+```
+
+Both scripts **only report and suggest.** The agent then resolves each candidate:
+
+- `promoted` — verified true, written into the rules.
+- `checked-unchanged` — looked, nothing to change.
+- `rejected` — stale or too specific.
+- `needs-user` — high-risk and unverifiable; ask the human.
+
+The scripts never promote anything themselves. You stay in control of what becomes a rule.
+
+## Install
+
+The one command above (`agent-install-rules.sh --target <project>`) covers most cases. A few specifics:
+
+**One agent only (Claude *or* Codex).** Install the normal way — there is no per-agent flag, and the installer always writes both agents' files. Just use yours; the other set is inert (it is never executed), and you should leave it in place because validation expects both to exist. Optionally wire up only your agent's hooks:
+
+```bash
+cp .claude/settings.example.json .claude/settings.json   # Claude
+cp .codex/hooks.example.json     .codex/hooks.json       # Codex
+```
+
+Claude-only additionally gets subagents under `.claude/agents/` (reviewer, qa, docs-drift-checker); Codex-only keeps everything except those.
+
+**Brand-new / empty repo.** Works from the first commit. The scan runs even with no code — it simply reports `none detected` and writes empty candidate lists. Adaptation is then light: the agent mostly confirms product intent with you and marks unknowns `needs-user`. Greenfield is the best time to install, since the rules grow with the project instead of being bolted on later.
+
+**Existing project that already has rules.** Add `--force`; old `AGENTS.md`, `CLAUDE.md`, `.agent/`, etc. are backed up under `.rules-kit/backups/` and read as clues during adaptation:
 
 ```bash
 /path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --force
 ```
 
-Old rule files are backed up under `.rules-kit/backups/rules-install-<timestamp>/` and must be read as clues during adaptation.
-
-## Common Usage Patterns
-
-### New Project
-
-Start Claude Code or Codex in the new project and give the agent the recommended prompt above.
-
-Expected result:
-
-- Rules are installed.
-- Bootstrap scans the current repository.
-- The agent adapts `.agent/*` from actual code/config.
-- Strict validation passes.
-- Future agents can start from `AGENTS.md` instead of rediscovering the project from zero.
-
-### Single Agent (Claude-Only Or Codex-Only)
-
-The kit is built for both agents but does not require both. Install the normal way:
+**Verify an install:**
 
 ```bash
-/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
-```
-
-Then:
-
-- The installer always writes both agents' files (`.claude/` and `.agents/` + `.codex/`). There is no per-agent install flag, and you should not delete the unused set — `validate-installed-project.sh` checks that both exist.
-- Use only your agent; the other agent's files sit unused and harmless. Everything that matters lives in the shared `AGENTS.md` and `.agent/*`, which both agents read the same way.
-- Wire up hooks for your agent only (optional):
-  - Claude: `cp .claude/settings.example.json .claude/settings.json`
-  - Codex: `cp .codex/hooks.example.json .codex/hooks.json`
-- Claude-only also gains subagents under `.claude/agents/` (reviewer, qa, docs-drift-checker). Codex-only keeps every skill, hook, and workflow except those subagents.
-
-### Brand-New Or Empty Repository
-
-You can install from the very first commit; the kit does not assume an existing or mature codebase.
-
-- Bootstrap runs even with no source code: it reports `none detected`, writes empty candidate lists, and still exits cleanly. No git history is required.
-- After install, rules are generic and `.agent/adaptation-review.md` says `Status: pending`. With little code to verify against, adaptation is light — the agent mainly confirms product intent with you, marks high-risk unknowns as `needs-user`, then sets `Status: adapted`.
-- As real code lands, drift checks and rule candidates grow the rules from verified evidence. Greenfield is the ideal time to install, because the rules grow with the project instead of being retrofitted later.
-
-The agent-first command above works here too. For a pure shell install without an agent, use the [low-level command](#low-level-install-command) with `--bootstrap`.
-
-### Existing Project With Old Rules
-
-Use `--force` through the agent-facing command.
-
-Expected result:
-
-- Old `AGENTS.md`, `CLAUDE.md`, `.agent`, `.agents`, `.claude`, and `.codex` paths are moved into `.rules-kit/backups/`.
-- Old rules are reviewed as clues.
-- Verified durable facts are promoted into the new `.agent/*`.
-- Stale, contradictory, or unprovable old facts are rejected or written under `needs-user`.
-
-This is the safe path when old Claude/Codex memory or old project docs may be wrong.
-
-### Daily Feature Work
-
-For normal implementation or review, the agent should:
-
-1. Read `AGENTS.md`.
-2. Open `.agent/index.md`.
-3. Load only the relevant workflow/domain docs.
-4. Inspect current code/config/tests before editing.
-5. Run appropriate validation from `.agent/command-contract.md`.
-6. Run drift/rule-candidate checks before finalizing non-trivial work.
-7. Update `.agent/*` only when the change created or changed durable project knowledge.
-
-Example: if a feature changes sync deletion behavior, the agent should inspect the real sync/data code, update the implementation, verify it, then decide whether `.agent/domains/data-sync.md` or `.agent/user-journeys.md` needs a rule update.
-
-### Claude Code And Codex Handoff
-
-The two agents do not need to share private memory to stay aligned.
-
-They align through repository-visible files:
-
-- `AGENTS.md` and `CLAUDE.md` for entry.
-- `.agent/*` for durable project truth.
-- `.agent/work/*` for optional handoff notes.
-- `.agent/rule-candidates.md` for pending rule-maintenance decisions.
-
-If Claude implements and Codex reviews, Codex should inspect the actual diff and evidence. If Codex implements and Claude continues, Claude should do the same. A handoff note is intent, not proof.
-
-### Large Refactor Or Project Shape Change
-
-Run bootstrap again after large structure changes:
-
-```bash
-python3 scripts/bootstrap-project-context.py
-python3 scripts/check-doc-drift.py
-python3 scripts/suggest-rule-updates.py
-```
-
-Then the agent should re-check `.agent/project-map.md`, `.agent/command-contract.md`, `.agent/drift-map.yml`, and `.agent/rule-candidates.md`.
-
-### When Rules Become Noisy
-
-Use `.agent/rule-health.md`.
-
-Rules should be kept when they are durable and helpful. They should be rewritten, moved, or deleted when they are stale, duplicated, too specific, or causing noisy drift checks.
-
-## What Actually Happens
-
-### 1. Install
-
-`agent-install-rules.sh` calls the lower-level installer with bootstrap enabled.
-
-It writes the template files, records install metadata in `.agent/rules-kit.json`, backs up any existing rule files before replacing them (unless `--no-backup` is passed), and runs the bootstrap scanner.
-
-After this phase, the project is only installed. It is not adapted yet. `.agent/adaptation-review.md` should still say `Status: pending`.
-
-### 2. Bootstrap
-
-`scripts/bootstrap-project-context.py` scans current repository files and config. It writes conservative, reviewable clues:
-
-- `.agent/project-map.md`: detected project type, localization signals, path signals, command candidates.
-- `.agent/command-contract.md`: generated command candidates, while preserving verified command inventory.
-- `.agent/bootstrap-report.md`: what was detected, what old backups exist, and what the agent must review.
-- `.agent/rule-candidates.md`: initial candidates for rule maintenance.
-
-Bootstrap does not prove product intent. For example, a file named `sync.ts` is only a sync signal; it does not prove the product has verified cloud sync.
-
-### 3. Adapt
-
-Claude Code or Codex follows `.agent/workflows/adapt-rules.md`.
-
-The agent inspects current code, config, tests, scripts, docs, generated files, old backups, and available tool output. Then it promotes only verified durable facts into `.agent/*`.
-
-Typical adaptation output:
-
-- `product-invariants.md`: what the product must keep true.
-- `user-journeys.md`: the main user paths the agent should close when changing behavior.
-- `domains/*.md`: domain-specific facts and verification rules.
-- `command-contract.md`: commands the agent has actually verified or intentionally kept as candidates.
-- `drift-map.yml`: project-specific path-to-doc ownership, trimmed so drift checks are useful instead of noisy.
-- `tool-policy.md`: project tools, CLIs, MCPs, device/browser/database/remote dependencies.
-- `adaptation-review.md`: final status, reviewed evidence, and high-risk unknowns.
-
-Old `AGENTS.md`, `CLAUDE.md`, Claude memory, Codex memory, handoffs, and summaries are only clues. If a fact cannot be verified from current evidence, it is not promoted into official rules.
-
-### 4. Validate
-
-Strict validation checks that:
-
-- The installed structure exists.
-- `CLAUDE.md` imports `@AGENTS.md`.
-- Required scripts are executable.
-- `.agent/adaptation-review.md` says `Status: adapted`.
-- `.agent/adaptation-review.md` has no remaining `pending` fields, such as `Adapted by:` or `Last reviewed:`.
-- Adaptation checklist items are checked.
-- `.agent/rule-candidates.md` has no ordinary `Status: pending` items.
-
-Use:
-
-```bash
-/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
-```
-
-### 5. Work
-
-After adaptation, normal development uses the shared contract:
-
-- Implementers read the relevant workflow/domain docs, then inspect real code before editing.
-- Reviewers inspect current diff, code paths, and verification evidence instead of trusting handoffs.
-- Continuers reconstruct state from git, files, and notes.
-- Release work verifies live external state with real tools before claiming anything.
-
-The agent should not load every rule file every time. It should start from `AGENTS.md` and `.agent/index.md`, then open only the workflow/domain docs needed for the task.
-
-### 6. Grow
-
-When code changes may affect durable project knowledge, the Rules kit grows through candidates:
-
-```text
-code/config/docs changed
-  -> check-doc-drift.py reports possible affected docs
-  -> suggest-rule-updates.py writes rule candidates
-  -> agent inspects evidence
-  -> agent promotes, checks unchanged, rejects, or marks needs-user
-```
-
-The script does not edit official rules by itself. The agent decides autonomously when evidence is enough. The user should only be pulled in for high-risk facts that cannot be proven and matter to the current task.
-
-## What Is Automatic
-
-Automatic:
-
-- Back up old rule files during forced install.
-- Install shared entrypoints, `.agent` protocols, skills, hooks examples, and helper scripts.
-- Detect project shape from files/config.
-- Generate command candidates.
-- Generate review candidates from old rules in backups.
-- Detect likely doc drift from changed paths.
-- Generate rule-maintenance candidates.
-- Validate whether adaptation and candidate review are complete.
-
-Agent-driven:
-
-- Decide which old-rule facts are true.
-- Verify commands before putting them into the command contract.
-- Trim noisy `drift-map.yml` entries.
-- Promote useful candidates into `.agent/*`.
-- Reject stale or overly specific rules.
-- Mark high-risk unverified facts as `needs-user`.
-
-Not automatic:
-
-- Proving live App Store, production, billing, remote, device, credential, or user-data state without real tools.
-- Blindly copying old `AGENTS.md` / `CLAUDE.md` into new rules.
-- Turning every detected file or one-time incident into a durable rule.
-- Guaranteeing Claude private memory and Codex private memory are correct or synchronized.
-
-## What Gets Written
-
-The installer writes the shared contract and helper scripts into the target project:
-
-- `AGENTS.md`: shared entrypoint for Codex and other agents.
-- `CLAUDE.md`: thin Claude Code entrypoint that imports `AGENTS.md`.
-- `.agent/`: shared project rules, workflows, domains, adaptation status, command contract, drift map, and rule candidates.
-- `.agents/skills/`: Codex skills that load the shared `.agent/` protocols.
-- `.claude/skills/`, `.claude/agents/`, `.claude/hooks/`: Claude Code-specific helpers.
-- `.codex/`: Codex hook examples.
-- `scripts/check-doc-drift.py`, `scripts/suggest-rule-updates.py`, `scripts/bootstrap-project-context.py`.
-
-Recommended version-control policy:
-
-- Commit `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.codex/`, and `scripts/`.
-- Decide per project whether to commit `.rules-kit/backups/`; it is useful migration evidence but may contain stale or bulky old rules.
-- Decide per project whether `.claude/` should be committed. Some teams ignore it because Claude Code also has private local memory; the shared contract must still live in `.agent/`.
-- Usually keep `.agent/work/*` local unless the team intentionally shares handoff notes.
-
-## Low-Level Install Command
-
-This lower-level command only installs templates and optional bootstrap candidates. It does not adapt rules to the project by itself.
-
-```bash
-/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --bootstrap
-```
-
-If the project already has `AGENTS.md`, `CLAUDE.md`, `.agent`, `.agents`, `.claude`, or `.codex`, the installer refuses to overwrite by default. To replace them safely:
-
-```bash
-/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --force
-```
-
-For existing projects, use both:
-
-```bash
-/path/to/agent-rules-kit/scripts/install-rules.sh --target /path/to/project --force --bootstrap
-```
-
-Existing rule files are backed up under:
-
-```text
-.rules-kit/backups/rules-install-<timestamp>/
-```
-
-After low-level install, an agent still needs to follow `.agent/workflows/adapt-rules.md` and review/customize:
-
-- `AGENTS.md`
-- `CLAUDE.md`
-- `.agent/adaptation-review.md`
-- `.agent/product-invariants.md`
-- `.agent/user-journeys.md`
-- `.agent/domains/*`
-- `.agent/tool-policy.md`
-- `.agent/command-contract.md` command inventory and generated candidates
-- `.agent/drift-map.yml`
-- `.agent/rule-candidates.md`
-- `.agent/project-map.md`
-- `.agent/bootstrap-report.md`
-
-Validate an installed project:
-
-```bash
+# structure is in place:
 /path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project
-```
-
-Validate that a project has been agent-adapted, not only installed:
-
-```bash
+# the agent actually adapted it, not just installed it:
 /path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
-If you installed without `--bootstrap`, run:
+Validation checks **form, not correctness** — that status fields are filled and candidates resolved. It cannot judge whether the agent's facts are right; that is on the agent and you. The lower-level `install-rules.sh` (`--bootstrap`, `--force`, `--dry-run`, `--no-backup`) is there if you want to install without the agent wrapper.
 
-```bash
-/path/to/agent-rules-kit/scripts/bootstrap-project.sh /path/to/project
+## Daily use, after adaptation
+
+For ordinary work the agent reads `AGENTS.md`, opens `.agent/index.md`, and loads only the workflow/domain docs the task needs — not every file every time. It inspects the real code before editing, runs the verified commands from `.agent/command-contract.md`, and runs the drift/candidate scripts before finishing non-trivial work.
+
+When the rules themselves start to feel noisy or stale, `.agent/rule-health.md` is the guide for pruning, merging, or deleting them. The kit is meant to stay small, not grow into an encyclopedia.
+
+## Philosophy
+
+One idea underneath all of it: **the agent is the judge; the kit is the evidence collector.**
+
+- Source-of-truth order: your current instruction → current code/config/tests/tools/live state → shared `.agent/` docs → READMEs, issues, old handoffs and memories.
+- Private Claude or Codex memory is a personal hint, never shared project truth. Durable facts live in the repo where every agent can see them.
+- Docs point the agent at the right checks; current code and real tool output are what actually prove a fact.
+- Skills, hooks, and drift scripts make the right moment easier to catch — they do not replace judgment.
+
+## Reference
+
+<details>
+<summary><strong>What gets installed (file map)</strong></summary>
+
+```text
+AGENTS.md                     shared contract, read first by every agent
+CLAUDE.md                     thin Claude entrypoint, imports @AGENTS.md
+.agent/
+  index.md                    routes the agent to the right workflow/domain doc
+  source-of-truth.md          what counts as proof; what must be re-checked
+  adaptation-review.md        Status: pending | adapted; plus needs-user items
+  product-invariants.md       durable product promises
+  user-journeys.md            main flows and the loops to close
+  command-contract.md         verified commands (+ generated candidates)
+  domains/*.md                ui-copy, data-sync, build-test, release, localization, performance
+  workflows/*.md              adapt-rules, implement, review, continue, release
+  drift-map.yml               maps changed paths → docs that may need review
+  rule-candidates.md          script-written inbox; the agent resolves each item
+  rule-health.md              when to prune, merge, or delete rules
+.agents/skills/*              Codex skill stubs that load the shared .agent rules
+.claude/skills,agents,hooks   Claude Code equivalents (+ reviewer/qa/drift subagents)
+.codex/hooks*                 Codex hook stubs + example config
+scripts/*.py                  bootstrap-project-context, check-doc-drift, suggest-rule-updates
 ```
 
-Add this to the target project's `.gitignore` if you want handoff notes to stay local:
+Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.codex/`, `scripts/`. Keep `.agent/work/*` (handoff notes) local unless you intend to share them:
 
 ```gitignore
 .agent/work/*
 !.agent/work/README.md
 ```
 
-## Philosophy
+</details>
 
-- Private Claude memory and private Codex memory are hints, not shared project truth.
-- Old `AGENTS.md`, `CLAUDE.md`, handoffs, summaries, and memories are clues only. Current evidence wins.
-- Shared project rules live in the repository.
-- Docs route the agent to the right checks; current code, config, tests, builds, tools, and live remote state prove facts.
-- Skills improve automatic workflow loading, but high-risk work still needs explicit verification and tool output.
-- Hooks can catch repeated mistakes, but they do not replace agent judgment.
-- Drift checks discover likely doc-review needs from changed paths. Agents decide autonomously whether to promote, reject, or leave a high-risk fact as `needs-user`.
-- Command contracts keep verified validation commands in one place; bootstrap only refreshes clearly marked candidates.
-- Rule health checks keep the rules kit from growing into a noisy encyclopedia.
+<details>
+<summary><strong>The full lifecycle: install → bootstrap → adapt → validate → grow</strong></summary>
 
-## Drift Checks
+1. **Install** — `agent-install-rules.sh` copies the templates, records metadata in `.agent/rules-kit.json`, backs up any existing rule files (unless `--no-backup`), and runs the bootstrap scan. The project is now *installed*, not *adapted*: `.agent/adaptation-review.md` still says `Status: pending`.
+2. **Bootstrap** — `bootstrap-project-context.py` scans current files/config and writes **clues only** into `project-map.md`, `command-contract.md`, `bootstrap-report.md`, and `rule-candidates.md`. A file named `sync.ts` is a *signal*, not proof of verified cloud sync.
+3. **Adapt** *(agent-driven)* — following `.agent/workflows/adapt-rules.md`, the agent inspects current code, config, tests, and any old backups, then promotes **only verified facts** into `.agent/*`. Unprovable high-risk facts become `needs-user`.
+4. **Validate** — `validate-installed-project.sh` checks that the structure exists, `CLAUDE.md` imports `@AGENTS.md`, scripts are executable, and (with `--require-adapted --require-candidates-reviewed`) that adaptation status and candidates are resolved. Form, not correctness.
+5. **Grow** *(agent-driven)* — as code changes, the drift/candidate scripts surface possible stale docs; the agent promotes, checks-unchanged, rejects, or marks `needs-user`.
 
-After installing into a project, run this before finalizing non-trivial changes:
+</details>
 
-```bash
-python3 scripts/check-doc-drift.py
-python3 scripts/suggest-rule-updates.py
-```
+<details>
+<summary><strong>Enabling hooks (optional)</strong></summary>
 
-`check-doc-drift.py` maps changed files to `.agent` docs through `.agent/drift-map.yml`. It does not auto-edit docs.
-
-`suggest-rule-updates.py` writes `.agent/rule-candidates.md`. The agent should resolve candidates autonomously:
-
-- `promoted`
-- `checked-unchanged`
-- `rejected`
-- `needs-user`
-
-Only mark `needs-user` when the fact is high-risk and cannot be verified from repo/tool evidence. Do not leave ordinary completed work with `Status: pending` candidates.
-
-Customize `.agent/drift-map.yml` for each real project after installation. The default map is intentionally broad enough to be useful, but not a substitute for project-specific path ownership.
-
-## Optional Hook Enablement
-
-Hook files are installed as examples so projects can opt in deliberately.
-
-To enable Codex hooks, review and copy:
+Hooks ship as examples so you opt in deliberately. They are reminders and guards — they do not replace validation. Review the commands first, then:
 
 ```bash
-cp .codex/hooks.example.json .codex/hooks.json
+cp .codex/hooks.example.json     .codex/hooks.json        # Codex
+cp .claude/settings.example.json .claude/settings.json    # Claude Code
 ```
 
-To enable Claude Code hooks, review and copy:
+The Stop hook also runs `python3 scripts/check-doc-drift.py` when present.
 
-```bash
-cp .claude/settings.example.json .claude/settings.json
-```
-
-Do this only after reviewing the hook commands for the project. Hooks are reminders and guards, not a replacement for validation.
-
-## What This Kit Borrows From Agent Tooling
-
-- Short entrypoints: `AGENTS.md` and `CLAUDE.md` stay small.
-- Progressive disclosure: Claude and Codex skills load task workflows only when relevant.
-- Shared protocol: both agents read `.agent/` instead of maintaining separate long rule sets.
-- Tool evidence: MCP, CLI, browser, device, database, and remote tools are treated as proof sources.
-- Hooks: lifecycle reminders surface quality gates and drift checks at the moment agents tend to forget them.
-- Memory boundary: private memories stay personal; shared durable facts live in the repo.
-- Command inventory: validation commands live in `.agent/command-contract.md` and must be verified before use.
-- Rule maintenance: `.agent/rule-health.md` describes when to prune, move, rewrite, or delete rules.
+</details>
