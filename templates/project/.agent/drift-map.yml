@@ -1,0 +1,179 @@
+# Documentation drift map.
+#
+# Purpose:
+#   Map changed paths to shared rules/docs that may need review.
+#   This file does not decide that docs must change. It only makes the
+#   "should we check docs?" signal visible to agents and users.
+#
+# Syntax:
+#   - name: short label
+#     paths:
+#       - glob pattern matched against changed files
+#     docs:
+#       - repo-visible doc that should be reviewed
+#     reason: why this signal matters
+#
+# Customize this file after installing the rules kit in a real project.
+
+rules:
+  - name: agent-contract
+    paths:
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - ".agent/**"
+      - ".agents/**"
+      - ".claude/**"
+      - ".codex/**"
+    docs:
+      - ".agent/index.md"
+      - ".agent/source-of-truth.md"
+      - ".agent/doc-drift.md"
+      - ".agent/skill-policy.md"
+      - ".agent/tool-policy.md"
+      - ".agent/rule-health.md"
+    reason: "Agent workflow, memory, skill, hook, or tool policy changed."
+
+  - name: command-contract
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "yarn.lock"
+      - "package-lock.json"
+      - "Project.swift"
+      - "project.yml"
+      - "Package.swift"
+      - "Makefile"
+      - "justfile"
+      - "Gemfile"
+      - "Podfile"
+      - "scripts/**"
+      - ".github/workflows/**"
+    docs:
+      - ".agent/command-contract.md"
+      - ".agent/domains/build-test.md"
+      - ".agent/domains/release.md"
+    reason: "Durable commands, scripts, CI, or project-generation workflow may have changed."
+
+  - name: ui-copy
+    paths:
+      - "app/**"
+      - "components/**"
+      - "Components/**"
+      - "views/**"
+      - "Views/**"
+      - "pages/**"
+      - "screens/**"
+      - "Screens/**"
+      - "**/Views/**"
+      - "**/View/**"
+      - "**/Screens/**"
+      - "**/Screen/**"
+      - "**/Components/**"
+      - "**/Component/**"
+      - "**/*View*"
+      - "**/*Screen*"
+      - "**/*Component*"
+      - "**/*.tsx"
+      - "**/*.jsx"
+      - "**/*.vue"
+      - "**/*.svelte"
+      - "**/*.css"
+    docs:
+      - ".agent/domains/ui-copy.md"
+      - ".agent/user-journeys.md"
+      - ".agent/quality-gates.md"
+    reason: "UI, interaction, layout, or user-visible copy may have changed."
+
+  - name: localization
+    paths:
+      - "**/Localizable.strings"
+      - "**/*.lproj/**"
+      - "**/locales/**"
+      - "**/i18n/**"
+      - "**/translations/**"
+      - "**/*.strings"
+      - "**/*.arb"
+      - "**/*.po"
+      - "**/*.xliff"
+    docs:
+      - ".agent/domains/localization.md"
+      - ".agent/domains/ui-copy.md"
+    reason: "Supported strings, language behavior, or translation workflow may have changed."
+
+  - name: data-sync
+    paths:
+      - "**/Models/**"
+      - "**/Model/**"
+      - "**/Schema/**"
+      - "**/Migrations/**"
+      - "**/Migration/**"
+      - "**/Stores/**"
+      - "**/Store/**"
+      - "**/Services/**"
+      - "**/*Sync*"
+      - "**/*Migration*"
+      - "**/*Backup*"
+      - "**/*Import*"
+      - "**/*Export*"
+      - "**/*.sql"
+      - "**/*.xcdatamodeld/**"
+    docs:
+      - ".agent/domains/data-sync.md"
+      - ".agent/quality-gates.md"
+    reason: "Data lifecycle, persistence, sync, backup, or destructive behavior may have changed."
+
+  - name: build-test
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "yarn.lock"
+      - "package-lock.json"
+      - "Project.swift"
+      - "project.yml"
+      - "Package.swift"
+      - "Makefile"
+      - "justfile"
+      - "Gemfile"
+      - "Podfile"
+      - ".github/workflows/**"
+      - "scripts/**"
+      - "tests/**"
+      - "**/*Tests/**"
+      - "**/*Test*"
+    docs:
+      - ".agent/domains/build-test.md"
+      - ".agent/command-contract.md"
+      - ".agent/verification-map.md"
+    reason: "Build, test, CI, generated project, or local runtime workflow may have changed."
+
+  - name: release
+    paths:
+      - ".github/workflows/**"
+      - "fastlane/**"
+      - "docs/**release**"
+      - "docs/**deploy**"
+      - "docs/**store**"
+      - "ExportOptions.plist"
+      - "**/*Release*"
+      - "**/*Deploy*"
+      - "**/*Signing*"
+      - "**/*Entitlements*"
+      - "**/*.entitlements"
+    docs:
+      - ".agent/domains/release.md"
+      - ".agent/workflows/release.md"
+      - ".agent/tool-policy.md"
+    reason: "Release, signing, deployment, store, or external operation workflow may have changed."
+
+  - name: performance
+    paths:
+      - "**/*Performance*"
+      - "**/*Benchmark*"
+      - "**/*Cache*"
+      - "**/*Query*"
+      - "**/*Index*"
+      - "**/*Pagination*"
+    docs:
+      - ".agent/domains/performance.md"
+      - ".agent/verification-map.md"
+    reason: "Performance-sensitive paths, metrics, cache, or benchmark behavior may have changed."

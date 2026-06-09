@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Check whether current git changes may require shared agent-doc review.
+
+This script maps changed files to .agent docs using .agent/drift-map.yml.
+It does not decide that docs must be updated; it reports which docs should be
+checked so users and agents do not have to guess.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fnmatch
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+def run_git(args: list[str]) -> list[str]:
+    result = subprocess.run(
+        ["git", *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def changed_files(base: str | None) -> list[str]:
+    files: set[str] = set()
+    if base:
+        files.update(run_git(["diff", "--name-only", base, "--"]))
+    else:
+        files.update(run_git(["diff", "--name-only", "--"]))
+        files.update(run_git(["diff", "--cached", "--name-only", "--"]))
+    files.update(run_git(["ls-files", "--others", "--exclude-standard"]))
+    return sorted(files)
+
+
+def parse_drift_map(path: Path) -> list[dict[str, object]]:
+    if not path.exists():
+        return []
+
+    rules: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+    active_list: str | None = None
+
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+
+        if re.match(r"^\s*-\s+name:\s*", line):
+            if current:
+                rules.append(current)
+            current = {
+                "name": line.split("name:", 1)[1].strip().strip('"'),
+                "paths": [],
+                "docs": [],
+                "reason": "",
+            }
+            active_list = None
+            continue
+
+        if current is None:
+            continue
+
+        stripped = line.strip()
+        if stripped in {"paths:", "docs:"}:
+            active_list = stripped[:-1]
+            continue
+
+        if stripped.startswith("reason:"):
+            current["reason"] = stripped.split("reason:", 1)[1].strip().strip('"')
+            active_list = None
+            continue
+
+        if stripped.startswith("- ") and active_list in {"paths", "docs"}:
+            value = stripped[2:].strip().strip('"')
+            current[active_list].append(value)  # type: ignore[index]
+
+    if current:
+        rules.append(current)
+
+    return rules
+
+
+def matches(pattern: str, file_path: str) -> bool:
+    normalized = file_path.replace("\\", "/")
+    pattern = pattern.replace("\\", "/")
+    return fnmatch.fnmatch(normalized, pattern)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Report possible agent doc drift.")
+    parser.add_argument("--base", help="Optional git base ref to compare against.")
+    parser.add_argument("--map", default=".agent/drift-map.yml", help="Path to drift map.")
+    parser.add_argument("--quiet", action="store_true", help="Only use exit status.")
+    parser.add_argument(
+        "--fail-on-drift",
+        action="store_true",
+        help="Exit 1 when drift candidates are found.",
+    )
+    args = parser.parse_args()
+
+    files = changed_files(args.base)
+    rules = parse_drift_map(Path(args.map))
+
+    if not files:
+        if not args.quiet:
+            print("Doc drift check: no changed files detected.")
+        return 0
+
+    hits: list[tuple[dict[str, object], list[str]]] = []
+    for rule in rules:
+        patterns = rule.get("paths", [])
+        matched = [
+            file_path
+            for file_path in files
+            if any(matches(str(pattern), file_path) for pattern in patterns)  # type: ignore[arg-type]
+        ]
+        if matched:
+            hits.append((rule, matched))
+
+    if not hits:
+        if not args.quiet:
+            print("Doc drift check: changed files did not match any drift-map rule.")
+        return 0
+
+    if not args.quiet:
+        print("Doc drift check: review may be needed.")
+        for rule, matched in hits:
+            print(f"\n[{rule.get('name', 'unnamed')}] {rule.get('reason', '')}")
+            print("Changed files:")
+            for file_path in matched[:20]:
+                print(f"  - {file_path}")
+            if len(matched) > 20:
+                print(f"  - ... {len(matched) - 20} more")
+            print("Review docs:")
+            for doc in rule.get("docs", []):  # type: ignore[assignment]
+                print(f"  - {doc}")
+        print("\nAgent expectation: say whether each suggested doc was updated, checked and unchanged, or out of scope.")
+
+    return 1 if args.fail_on_drift else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+

@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/stop_quality_reminder.py",
+            "timeout": 10,
+            "statusMessage": "Checking project quality reminders"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/pre_bash_release_guard.py",
+            "timeout": 10,
+            "statusMessage": "Checking high-risk command reminder"
+          }
+        ]
+      }
+    ]
+  }
+}
+
