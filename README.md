@@ -40,10 +40,10 @@ Take "add a `nickname` field to the user":
 Be honest about the weight: this is **not a framework, an engine, or a runtime.** It's a folder of files you copy into your repo:
 
 - `AGENTS.md` — the shared contract every agent reads first. Codex loads it natively at startup; Claude Code loads it through a thin `CLAUDE.md` that does `@AGENTS.md` (the officially documented bridge).
-- `.agent/` — a set of short markdown files: product promises, user journeys, verified commands, per-domain rules, and a lifecycle routing index. Most start as templates the agent fills in from your real code.
+- `.agent/` — a set of short markdown files: product promises, user journeys, verified commands, per-domain rules, and a routing map (which doc to load for which task). Most start as templates the agent fills in from your real code.
 - `.claude/rules/` — tiny path-scoped pointers (3 lines each) that auto-load the right domain doc the moment Claude reads a matching file.
-- `.claude/skills/` — thin workflow loaders; the Codex tree under `.agents/skills/` is **generated from it at install time**, so the two tools can never drift apart.
-- Hooks for both tools: a bash guard, a finalization gate, and (Codex only) a router that injects domain-doc pointers after edits.
+- `.claude/skills/` — thin workflow loaders; the Codex tree under `.agents/skills/` is **generated from it at install time**, so the two tools can never diverge.
+- Hooks for both tools: a bash guard that blocks dangerous commands, a Stop gate that won't let a task end with unresolved candidates (the rule-update suggestions described below), and (Codex only) a domain router that injects the same pointers after edits.
 - Three small Python scripts (standard library only, **no dependencies**) that scan the repo and **write suggestions**. They never edit your rules.
 
 **The division of labor is the whole point: the agent is the judge; the scripts only collect evidence and flag what might be stale.** Nothing in here decides anything on its own.
@@ -54,12 +54,12 @@ It works with **one agent or two**, and from **commit zero**. See [Install](#ins
 
 Rules only help if they don't drown the agent. The kit keeps the always-loaded footprint to one small file and routes everything else on demand:
 
-- **Always loaded:** `AGENTS.md` (~35 lines). That's the whole standing tax.
-- **Loaded when files are touched:** Claude Code auto-loads a 3-line pointer from `.claude/rules/` when it reads a matching file (e.g. anything under `components/` points to `.agent/domains/ui-copy.md`). Codex, which has no path-scoped rules, gets the same pointer injected by a PostToolUse hook after an edit — once per area per session, one line each.
+- **Always loaded:** `AGENTS.md` (~35 lines). That's the entire always-loaded cost.
+- **Loaded when files are touched:** Claude Code auto-loads a 3-line pointer from `.claude/rules/` when it reads a matching file (e.g. anything under `components/` points to `.agent/domains/ui-copy.md`). Codex, which has no such auto-loading, gets the same pointer injected by a PostToolUse hook after an edit — once per area per session, one line each.
 - **Loaded when invoked:** skills carry only their name and description until used; each routes to one shared workflow doc.
 - **Listed mechanically:** after editing, `python3 scripts/check-doc-drift.py` prints exactly which shared docs map to the actual diff. The agent loads that list — not the whole `.agent/` directory.
 
-So an ordinary task costs the contract, the domains it actually touched, plus a fixed finalize pass (the drift list and the candidate inbox — a couple of thousand tokens, independent of task size). The same glob map (`.agent/drift-map.yml`) drives routing and drift detection, and the globs are word-boundary precise: `ProductCard.tsx` does not trigger the production-risk rule, and a utility `.tsx` file outside UI directories does not nag about copy.
+So an ordinary task costs the contract, the domains it actually touched, plus a fixed end-of-task check (the doc-drift report and the candidate inbox — a couple of thousand tokens regardless of task size). The same drift-map (`.agent/drift-map.yml`) drives routing and drift detection, and its globs are word-boundary precise: `ProductCard.tsx` does not trigger the rule that watches production paths, and a utility `.tsx` file outside UI directories does not nag about copy.
 
 ## Quickstart
 
@@ -73,7 +73,7 @@ git clone https://github.com/liyuhao957/agent-rules-kit.git
 /path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
 ```
 
-The installer copies the files and scans your repo for clues. Then the agent reads your actual code and **fills the templates in with verified facts** — that part is the agent's work, not the script's. From then on, any agent starts from `AGENTS.md` instead of rediscovering the project from scratch.
+The installer copies the files and runs a first scan of your repo for clues (the bootstrap scan). Then the agent reads your actual code and **fills the templates in with verified facts** — that part is the agent's work, not the script's. From then on, any agent starts from `AGENTS.md` instead of rediscovering the project from scratch.
 
 Two one-time steps after install: restart the agent session (so new skills are discovered), and approve the project hooks on first use — Claude Code asks about project settings; Codex needs the `.codex/` layer trusted and hooks reviewed via `/hooks`. **Until trusted, the hooks are inert.**
 
@@ -115,13 +115,13 @@ Both scripts **only report and suggest.** The agent then resolves each candidate
 - `rejected` — stale or too specific.
 - `needs-user` — high-risk and unverifiable; ask the human.
 
-The scripts never promote anything themselves. You stay in control of what becomes a rule. The inbox is built so the lazy paths do not work:
+The scripts never promote anything themselves. You stay in control of what becomes a rule. `.agent/rule-candidates.md` works like an inbox, and it is built so that shortcuts don't work:
 
-- Candidates are keyed to their evidence (`drift:ui-copy@a1b2c3d`): a decision stays resolved for that evidence, but the same rule firing on **new** files resets to pending instead of inheriting last week's verdict.
-- Pending items are never dropped by regeneration and survive commits — committing work does not clear the inbox, and the Stop gate blocks on committed-but-pending items too.
-- A status flipped without a real decision note reverts to pending on the next scan.
-- Resolved items move to a compact archive section (the audit trail), and a rejected candidate stays suppressed instead of coming back every run.
-- Vendor output (`node_modules/`, `dist/`, …) and the kit's own installation files never produce candidates; the installer auto-resolves day-zero self-noise.
+- Every candidate is tied to the exact files that triggered it (that's the `@a1b2c3d` suffix in `drift:ui-copy@a1b2c3d`). A decision covers those files only — when the same rule later fires on **new** files, a fresh `pending` item appears instead of inheriting last week's verdict.
+- `pending` items survive re-scans and commits alike. Committing your work does not empty the inbox; the Stop gate still blocks when unresolved items were committed earlier.
+- Flipping a status without writing a real decision note doesn't stick — the next scan reverts it to `pending`.
+- Decided items move to a compact archive at the bottom of the file, so the decision history stays readable — and a `rejected` candidate stays rejected instead of coming back every run.
+- Dependency and build output (`node_modules/`, `dist/`, …) never produces candidates, and the installer resolves the candidates triggered by its own files — a fresh install starts with a clean inbox.
 
 ## What is actually enforced (and what isn't)
 
@@ -129,14 +129,14 @@ Honesty about enforcement matters more than the appearance of it. The exact spli
 
 | Mechanism | Fires on | Blocks? |
 | --- | --- | --- |
-| Bash guard (PreToolUse, both tools) | force push, `git reset --hard`, `rm -rf` (except ephemeral dirs like `node_modules`/`dist`), release/deploy/publish/submit — including wrapped forms like `npx vercel deploy` and `sh -c "npm publish"` — production mutations, destructive SQL via remote-capable DB CLIs | **Yes** — exit 2; bypass `RULES_HOOK_ALLOW_RISK=1` |
-| Finalization gate (Stop, both tools) | pending items in `.agent/rule-candidates.md` — from the current diff **or committed earlier**; committing is not a bypass | **Yes** — lists the pending IDs and the exact re-check command; the agent continues and resolves them (a Stop block means "keep going and fix this", not "halt"); bypass `RULES_HOOK_ALLOW_PENDING=1` |
-| Doc-drift report | shown inside the gate's block message, and on demand | No — advisory list of docs to review |
-| Stale-map warning | (post-adaptation) a literal drift-map glob matches no repo file — usually a renamed directory | No — one-line warning; the watcher's watcher |
-| Domain router (PostToolUse, Codex) | first edit touching a mapped area | No — one-line pointer |
-| Everything else — the quality loops, source-of-truth order, workflows | prose contract | No — agent judgment, by design |
+| Bash guard (PreToolUse, both tools) | force push, `git reset --hard`, `rm -rf` (with an exception for throwaway dirs like `node_modules` and `dist`), release/deploy/publish/submit — including wrapped forms like `npx vercel deploy` and `sh -c "npm publish"` — commands that change production state, destructive SQL run through a real database CLI (`psql`, `mysql`) | **Yes** — exit 2; bypass `RULES_HOOK_ALLOW_RISK=1` |
+| Stop gate (both tools) | unresolved candidates in `.agent/rule-candidates.md`, whether from the current diff or committed earlier | **Yes** — lists the pending IDs and the exact re-check command; the agent continues and resolves them (a Stop block means "keep going and fix this", not "halt"); bypass `RULES_HOOK_ALLOW_PENDING=1` |
+| Doc-drift report | on demand; also shown whenever the Stop gate blocks | No — advisory list of docs to review |
+| Drift-map self-check | after adaptation, a concrete path in the map matches no file in the repo — usually a renamed directory | No — one-line warning that the map itself went stale |
+| Codex domain router (PostToolUse) | first edit touching a mapped area | No — one-line pointer |
+| Everything else — the quality loops, source-of-truth order, workflows | the written contract | No — agent judgment, by design |
 
-So: the only hard gates are the narrow bash guard and the candidate inbox. "Don't trust stale docs" and "close every loop" are guidance the agent follows because the contract says so — the kit makes the right moment easy to catch, it does not prove correctness. Both hooks have a loop guard (`stop_hook_active`) so a gate can never spin forever.
+So: the only hard stops are the narrow bash guard and the Stop gate. "Don't trust stale docs" and "close every loop" are guidance the agent follows because the contract says so — the kit makes the right moment easy to catch, it does not prove correctness. Both hooks have a loop guard (`stop_hook_active`) so a gate can never spin forever.
 
 ## Install
 
@@ -144,7 +144,7 @@ The one command above (`agent-install-rules.sh --target <project>`) covers most 
 
 **One agent only (Claude *or* Codex).** Install the normal way — the installer always writes both agents' files. Just use yours; the other set is inert unless that tool is running, and validation expects both to exist.
 
-**Brand-new / empty repo.** Works from the first commit. The scan reports `none detected` and adaptation is light: the agent mostly confirms product intent with you and marks unknowns `needs-user`. Greenfield is the best time to install.
+**Brand-new / empty repo.** Works from the first commit. The bootstrap scan reports `none detected` and adaptation is light: the agent mostly confirms product intent with you and marks unknowns `needs-user`. Greenfield is the best time to install.
 
 **Existing project that already has rules.** Add `--force`; old `AGENTS.md`, `CLAUDE.md`, `.agent/`, etc. are backed up under `.rules-kit/backups/` and read as clues during adaptation. If your old `.claude/settings.json` or `.codex/hooks.json` had custom hooks, permissions, or commands, the installer warns you and the adaptation workflow merges them back from the backup:
 
@@ -152,13 +152,13 @@ The one command above (`agent-install-rules.sh --target <project>`) covers most 
 /path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --force
 ```
 
-**Updating the kit.** `--upgrade` replaces only kit machinery (scripts, hooks, skills, workflow docs) and never touches adapted content (`product-invariants.md`, `user-journeys.md`, `command-contract.md`, `drift-map.yml`, your active `settings.json`/`hooks.json`). Replaced files are backed up first:
+**Updating the kit.** `--upgrade` replaces only the kit's own tooling (the three scripts, hooks, skills, workflow docs) and never touches what the agent adapted (`product-invariants.md`, `user-journeys.md`, `command-contract.md`, `drift-map.yml`, or the `settings.json`/`hooks.json` currently in effect). Replaced files are backed up first:
 
 ```bash
 /path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --upgrade
 ```
 
-**Removing the kit.** Delete the managed paths and restore anything you want from the oldest backup (later backups may contain a previous kit install, not your originals): `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, the three kit scripts under `scripts/` (`check-doc-drift.py`, `bootstrap-project-context.py`, `suggest-rule-updates.py` — other files in `scripts/` are yours), and finally `.rules-kit/`.
+**Removing the kit.** Delete what the installer wrote, and restore anything you want from the oldest backup (later backups may contain a previous kit install, not your originals): `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, the three kit scripts under `scripts/` (`check-doc-drift.py`, `bootstrap-project-context.py`, `suggest-rule-updates.py` — other files in `scripts/` are yours), and finally `.rules-kit/`.
 
 **Verify an install:**
 
@@ -173,7 +173,7 @@ Validation checks **form, not correctness** — that status fields are filled, n
 
 ## Daily use, after adaptation
 
-For ordinary work the agent reads `AGENTS.md`, routes through `.agent/index.md`, and loads only what the task needs — domain pointers arrive automatically when files are touched. It inspects the real code before editing, runs the verified commands from `.agent/command-contract.md`, and resolves the drift/candidate inbox before finishing non-trivial work.
+For ordinary work the agent reads `AGENTS.md`, routes through `.agent/index.md`, and loads only what the task needs — domain pointers arrive automatically when files are touched. It inspects the real code before editing, runs the verified commands from `.agent/command-contract.md`, and works through the candidate inbox before finishing non-trivial work.
 
 For the dual-agent relay: when one agent stops mid-task, it writes `.agent/work/current.md` (objective, baseline commit, what's verified, what's not). The next agent — Claude or Codex — reconstructs state from `git status` and the diff, treating the note as intent, not proof.
 
@@ -186,8 +186,8 @@ One idea underneath all of it: **the agent is the judge; the kit is the evidence
 - Source-of-truth order: your current instruction → current code/config/tests/tools/live state → shared `.agent/` docs → READMEs, issues, old handoffs and memories.
 - Private Claude or Codex memory is a personal hint, never shared project truth. Durable facts live in the repo where every agent can see them.
 - Context is not enforcement (Anthropic's own framing): markdown guides the agent; the two narrow hooks block; tests and live tools prove.
-- Skills, rules pointers, and MCP/tools are loaders and evidence channels, not the rule source. Durable rules stay in repo-visible markdown.
-- A noisy detector feeding a blocking gate trains rubber-stamping — so detection is word-boundary precise and the advisory layer never blocks.
+- Skills, domain pointers, and MCP/tools are loaders and evidence channels, not the rule source. Durable rules stay in repo-visible markdown.
+- A noisy detector feeding a blocking gate trains rubber-stamping — so detection is word-boundary precise, and warnings and reports never block.
 
 ## Reference
 
@@ -198,7 +198,7 @@ One idea underneath all of it: **the agent is the judge; the kit is the evidence
 AGENTS.md                     shared contract; Codex reads it at startup, Claude via @import
 CLAUDE.md                     thin Claude entrypoint, imports @AGENTS.md
 .agent/
-  index.md                    lifecycle routing map: load only what the task needs
+  index.md                    routing map: load only what the task needs
   adaptation-review.md        Status: pending | adapted; plus needs-user items
   product-invariants.md       durable product promises
   user-journeys.md            main flows and the loops to close
@@ -207,16 +207,16 @@ CLAUDE.md                     thin Claude entrypoint, imports @AGENTS.md
   domains/*.md                ui-copy, data-sync, build-test, release, localization, performance
   workflows/*.md              adapt-rules, implement, review, continue, release
   drift-map.yml               changed paths → docs to review; also drives on-demand routing
-  rule-candidates.md          script-written inbox; the agent resolves each item
+  rule-candidates.md          the candidate inbox: scripts write, the agent decides
   rule-health.md              when to prune, merge, or delete rules
 .claude/
   rules/*.md                  path-scoped 3-line pointers; auto-load on matching file reads
   skills/*/SKILL.md           canonical thin workflow loaders (8)
   agents/*.md                 reviewer / qa / docs-drift-checker subagents
-  hooks/*.py + settings.json  bash guard + finalization gate
+  hooks/*.py + settings.json  bash guard + Stop gate
 .agents/skills/*              Codex skill tree — generated at install from .claude/skills
 .codex/
-  hooks/*.py + hooks.json     bash guard + finalization gate + domain router
+  hooks/*.py + hooks.json     bash guard + Stop gate + domain router
 scripts/*.py                  bootstrap-project-context, check-doc-drift, suggest-rule-updates
 ```
 
@@ -236,6 +236,6 @@ Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude
 2. **Bootstrap** — `bootstrap-project-context.py` scans current files/config and writes **clues only** into `project-map.md`, `command-contract.md`, `bootstrap-report.md`, and `rule-candidates.md`. A file named `sync.ts` is a *signal*, not proof of verified cloud sync.
 3. **Adapt** *(agent-driven)* — following `.agent/workflows/adapt-rules.md`, the agent inspects current code, config, tests, and any old backups, promotes **only verified facts** into `.agent/*`, tightens the drift-map globs to the project's real paths, and mirrors them into `.claude/rules/*`. Unprovable high-risk facts become `needs-user`.
 4. **Validate** — `validate-installed-project.sh` checks that the structure exists, `CLAUDE.md` imports `@AGENTS.md`, the Codex skill tree matches the canonical one, scripts are executable, and (with the strict flags) that adaptation status and candidates are resolved. Form, not correctness.
-5. **Grow** *(agent-driven)* — as code changes, the drift/candidate scripts surface possible stale docs; the agent promotes, checks-unchanged, rejects, or marks `needs-user`.
+5. **Grow** *(agent-driven)* — as code changes, the two scan scripts surface possibly stale docs and new rule candidates; the agent promotes, checks-unchanged, rejects, or marks `needs-user`.
 
 </details>
