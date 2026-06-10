@@ -1,31 +1,31 @@
-# Claude Code + Codex 项目规则套件
+# Relay Rules(接力规则)
 
 [English](./README.md) | 简体中文
 
-一份共享的、纯 Markdown 的「项目合同」:让任何来动你项目的智能体——Claude Code、Codex,或者你自己——都遵循同一套规则,以当前代码而不是过时文档为准,并且把活儿一次做完整,而不是只做一半。
+给在你项目里干活的 agent 立一套共同的规矩——不管你只用 Claude Code 一个,还是 Claude 和 Codex 换着用:谁接手,都先读同一份约定;动手前看当前代码,而不是过时文档;活做完整了才能收工。
 
-零运行时、零依赖。本质就是给智能体读的 Markdown,外加三个小脚本。它就是为「接力式」开发设计的:这个功能 Claude 写,下个功能或者这次审查换 Codex,再换回来。
+零运行时、零依赖——本质就是一组拷进你仓库的 Markdown 文件,外加三个小脚本。名字里的「接力」,首先指会话与会话之间:只用一个 agent 时,今天的会话和下周的会话就是一场接力,这套规则就是接力棒。两个 agent 换班——这个功能 Claude 写,下个功能或这次审查换 Codex——只是同一件事的双人版。
 
-## 它要堵的三个坑
+## 它帮你解决什么
 
-无论是一个智能体跨越多次会话,还是好几个轮流上手,在真实项目里都会反复撞上同样三种翻车。
+不管是一个 agent 跨多次会话,还是两个轮流上手,真实项目里反复翻车的就是这三件事。
 
 **坑一:每次重新开始,都把项目怎么干重新发明一遍。**
-新的一次会话是「冷启动」打开仓库的:它对上一次的决定没有可靠记忆,于是只能猜约定、起不同的命名、把「事情该怎么做」重新推导一遍。下一次接手的不管是同一个智能体、另一个智能体,还是一个月后的你,都会这样——两次 Claude 会话之间的分歧,和 Claude 与 Codex 之间一样大。时间一长,代码就裂开了。
-*堵法:* 把长期有效的决定写进仓库里一份大家都先读的文件(`AGENTS.md`)。下一个接手的人,从同一套标准起步,而不是从猜开始。
-> 就像一个谁都不做记录的工地:每拨人来——哪怕是下周回来的同一拨——都把「活该怎么干」重新发明一遍。把一份《工地须知》钉在墙上,大家就按同一套盖。
+新会话冷启动打开仓库:不记得之前的决定,只能猜约定、起不同的名字、把「事情该怎么做」重新推导一遍。接手的不管是同一个 agent、另一个 agent,还是一个月后的你,都一样——两次 Claude 会话之间的分歧,和 Claude 与 Codex 之间一样大。时间一长,代码就裂开了。
+*解法:* 把长期有效的决定写进仓库里一份谁都先读的文件(`AGENTS.md`)。下一个接手的人从同一套标准起步,而不是从猜开始。
+> 就像一个谁都不做记录的工地:每拨工人来——哪怕是下周回来的同一拨——都把「活该怎么干」重新发明一遍。把一份《工地须知》钉在墙上,大家就按同一套盖。
 
 **坑二:信了过时文档,照着错的目标动手。**
-文档写「登录接口是 `/api/login`」,但代码几个月前就改成了 `/api/v2/auth`。智能体信了文档,就对着一个早已不存在的目标写代码。
-*堵法:* 动手前先看当前的代码、配置、测试。真实的当下状态,优先于旧文档和记忆。
+文档写「登录接口是 `/api/login`」,但代码几个月前就改成了 `/api/v2/auth`。agent 信了文档,就对着一个早已不存在的目标写代码。
+*解法:* 动手前先看当前的代码、配置、测试。当下的真实状态,优先于旧文档和记忆。
 
 **坑三:只做半截活,就说「完成了」。**
-最经典的一幕:本地能跑、不报错,交差。可数据没存、页面没显示、文档没更新——整条用户路径从头到尾根本走不通。
-*堵法:* 一个改动,要等**功能、逻辑、数据、UI、文档**这几条线全部接通,才算做完。
+最经典的一幕:本地能跑、不报错,交差。可数据没存、页面没显示、文档没更新——用户真正要走的那条路,从头到尾走不通。
+*解法:* 一个改动,要等**功能、逻辑、数据、UI、文档**全部接上,才算做完。
 
 以「给用户加一个『昵称』字段」为例:
 
-| 链路 | 只做一半(常态) | 闭环(才算完成) |
+| 链路 | 只做一半(常态) | 做完(才算数) |
 | --- | --- | --- |
 | 功能 | 加了输入框 | 加了输入框 |
 | 逻辑 | 没写保存逻辑 | 提交时真能存进去 |
@@ -33,56 +33,60 @@
 | UI | 个人主页不显示 | 该显示的地方都显示了 |
 | 文档 | API 文档还是旧的 | 文档同步更新 |
 
-**一句话:** 别让每次会话各自发挥(用一份共享合同)、别信过时文档(以当前代码为准)、别只交半截活(UI → 逻辑 → 数据 → 文档全部接通才算数)。
+一句话:别让每次会话各自发挥(一份共享约定)、别信过时文档(以当前代码为准)、别只交半截活(全部接通才算数)。
+
+## 怎么用
+
+```bash
+# 1. 把仓库 clone 到机器上任意位置
+git clone https://github.com/liyuhao957/relay-rules.git
+
+# 2. 在你的项目里,对 agent(Claude Code 或 Codex)说:
+#    「为这个项目安装并适配 /path/to/relay-rules。」
+#    它会执行:
+/path/to/relay-rules/scripts/agent-install-rules.sh --target /path/to/project
+```
+
+按你项目的状态,一共三种装法:
+
+- **第一次装**——就用上面这条命令。装完是一堆模板,外加一次找线索的初始扫描,等着 agent 适配(「装完之后」一节讲适配是什么)。空仓库也能装,而且项目刚起步正是装它的最佳时机。只用一个 agent?这本来就是最常见的用法——照常装,属于另一个工具的那些文件放着不碍事。
+- **项目里已经有自己的 `AGENTS.md` / `CLAUDE.md` / `.claude/`**——加 `--force`。你的旧文件会先原样备份到 `.rules-kit/backups/` 再被替换,适配时当线索翻出来用;旧 settings 里有你自定义的钩子或权限的话,安装器会提醒你,适配流程会把它们合并回来。
+- **以前装过,现在出了新版**——加 `--upgrade`。只更新自带的脚本、钩子、技能、工作流文档,你已经填好的项目事实一个字不动,被换掉的文件也先备份。
+
+装完还有两个一次性动作:重启 agent 会话(让新技能被发现),并批准项目钩子——Claude Code 会询问项目设置;Codex 需要信任项目里的 `.codex/` 目录,并在 `/hooks` 里过一眼。**没批准之前,钩子不生效。**
+
+想确认装好了没:
+
+```bash
+# 结构都在:
+/path/to/relay-rules/scripts/validate-installed-project.sh /path/to/project
+# agent 真的适配过了,不是只装了个壳:
+/path/to/relay-rules/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
+```
+
+校验查的是**形式,不是正确性**——字段填了没有、模板占位符清没清干净、每个决定有没有写真实理由。事实本身对不对,要靠 agent 和你。
+
+**卸载**:把安装时写入的文件删掉——`AGENTS.md`、`CLAUDE.md`、`.agent/`、`.agents/`、`.claude/`、`.codex/`、`scripts/` 下的三个脚本(`check-doc-drift.py`、`bootstrap-project-context.py`、`suggest-rule-updates.py`,其余文件是你自己的),最后删 `.rules-kit/`。需要恢复的内容从最早那份备份里取(较新的备份可能是上一次安装,不是你的原始文件)。
 
 ## 它到底是什么
 
-先把分量说清楚:这**不是框架、不是引擎、也不是运行时**。它就是一堆你拷进仓库的文件:
+先把分量说清楚:这**不是框架、不是引擎、也没有运行时**。就是一堆拷进你仓库的文件:
 
-- `AGENTS.md`——每个智能体都先读的共享合同。Codex 启动时原生加载;Claude Code 通过极薄的 `CLAUDE.md` 做 `@AGENTS.md` 导入(官方文档记载的桥接写法)。
-- `.agent/`——一组短小的 Markdown:产品承诺、用户路径、已核实的命令、各领域规则,以及一张路由表(什么任务读哪份文档)。大多一开始是模板,由智能体照着你真实的代码填进去。
-- `.claude/rules/`——一组 3 行的路径域指针:Claude 一读到匹配的文件,对应领域文档的指针就自动加载。
-- `.claude/skills/`——薄薄的工作流加载器;Codex 那份 `.agents/skills/` **在安装时由它生成**,两边永远不会跑偏。
-- 两边的钩子:拦截危险命令的 bash 守卫、不让任务在候选(下文会讲的规则更新建议)未裁决时收尾的收尾门禁,以及(仅 Codex)一个编辑后注入同样领域指针的领域路由。
-- 三个小 Python 脚本(只用标准库、**零依赖**),扫描仓库后**写出建议**。它们从不修改你的规则。
+- `AGENTS.md`——谁都先读的那份共享约定。Codex 启动时原生加载;Claude Code 通过极薄的 `CLAUDE.md` 做一行 `@AGENTS.md` 导入(官方文档记载的桥接写法)。
+- `.agent/`——一组短小的 Markdown:产品承诺、用户路径、验证过的命令、各领域的规矩,以及一张「什么任务读哪份文档」的索引。大多一开始是模板,由 agent 照你的真实代码填。
+- `.claude/rules/`——一组小指针文件(正文就一行,外加路径匹配规则):Claude 一读到匹配的文件,对应领域的文档就自动加载。
+- `.claude/skills/`——薄薄的工作流入口;Codex 那份 `.agents/skills/` 在安装时由它生成,两边永远一致。
+- 两边各一套钩子。bash 守卫拦危险命令;收尾门禁管收工——收件箱里还有没处理的「候选」(下文讲)就不让结束;Codex 还多一个路由钩子,编辑后补送领域指针。
+- 三个小 Python 脚本(只用标准库、零依赖),扫描仓库、写出建议。它们从不直接改你的规则。
 
-**分工才是关键:智能体是裁判,脚本只负责收集证据、标出哪些可能过时了。** 这里没有任何东西会自己做决定。
+分工是关键:**agent 是裁判,脚本只收集证据、标出哪里可能过时了**。这里没有任何东西会自己做决定。
 
-它**一个或两个智能体**都能用,而且**从第一个提交**就能用。详见[安装](#安装)。
+## 装完之后:适配 → 日常 → 保持新鲜
 
-## 按需加载(token 账怎么算)
-
-规则只有在不淹没智能体的前提下才有用。这套套件把「常驻」开销压到一个小文件,其余全部按需路由:
-
-- **常驻加载:** `AGENTS.md`(约 35 行)。固定成本就这一项。
-- **碰到文件才加载:** Claude Code 读到匹配文件时自动加载 `.claude/rules/` 里那条 3 行指针(比如 `components/` 下的任何文件都指向 `.agent/domains/ui-copy.md`)。Codex 没有这种自动加载,就由 PostToolUse 钩子在编辑后注入同样的指针——每个区域每次会话只提示一次,每次一行。
-- **被调用才加载:** 技能在被使用前只占名字和描述;每个技能只负责路由到一份共享工作流文档。
-- **机械地列清单:** 编辑之后,`python3 scripts/check-doc-drift.py` 会精确列出当前 diff 对应哪些共享文档。智能体读这份清单——而不是整个 `.agent/` 目录。
-
-所以一个普通任务的开销 = 合同 + 实际碰到的领域 + 一段任务结束时的固定检查(文档漂移报告和候选收件箱,几千 token,与任务大小无关)。同一张映射表 drift-map(`.agent/drift-map.yml`)同时驱动路由和漂移检测,而且匹配是词边界级精确的:`ProductCard.tsx` 不会触发盯着生产环境路径的那条规则,UI 目录之外的工具类 `.tsx` 文件也不会被唠叨文案问题。
-
-## 快速上手
-
-```bash
-# 1. 把套件 clone 到机器上任意位置
-git clone https://github.com/liyuhao957/agent-rules-kit.git
-
-# 2. 在你的项目里,对智能体(Claude Code 或 Codex)说:
-#    「为这个项目安装并适配 /path/to/agent-rules-kit。」
-#    它会执行:
-/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project
-```
-
-安装器拷贝文件,并对你的仓库做一次找线索的初始扫描(bootstrap)。然后由智能体阅读你的真实代码,**把模板填成已核实的事实**——这一步是智能体的活,不是脚本的。从此之后,任何智能体都从 `AGENTS.md` 起步,而不是把项目重新摸一遍。
-
-装完后有两个一次性步骤:重启智能体会话(让新技能被发现),并在首次使用时批准项目钩子——Claude Code 会询问项目设置;Codex 需要信任 `.codex/` 层并在 `/hooks` 里审核。**在信任之前,钩子是不生效的。**
-
-## 「适配完成」长什么样
-
-刚装完时,规则文件还是通用模板,`.agent/adaptation-review.md` 写着 `Status: pending`。智能体的任务是把它们变成真实的、已核实的项目事实。例如:
+**适配,说白了就是把模板填成你项目的真话。** 刚装完时 `.agent/adaptation-review.md` 写着 `Status: pending`,agent 的任务是读你的真实代码,把通用模板变成验证过的项目事实:
 
 ```text
-之前(模板)                  之后(智能体照真实代码核实后填入)
+之前(模板)                  之后(agent 照真实代码核实后填入)
 ─────────────                ───────────────────────────────
 product-invariants.md        免费档最多 3 个项目。
   <持久的产品承诺>             删除账号后 24 小时内清除同步数据。
@@ -91,103 +95,73 @@ user-journeys.md             注册 → 验证邮箱 → 创建首个项目 → 
   <主流程>
 
 command-contract.md          测试:npm test(跑过,通过)
-  <已核实的命令>               构建:npm run build(跑过,成功)
+  <验证过的命令>               构建:npm run build(跑过,成功)
 
 drift-map.yml                glob 收紧到这个仓库的真实路径,
   <默认 glob>                  并镜像进 .claude/rules/* 的 frontmatter。
 ```
 
-凡是智能体**无法**从代码、测试或工具证明的——线上计费状态、生产配置、凭据——一律不会被晋升进规则,而是进入 `.agent/adaptation-review.md` 的 `needs-user` 区等你确认。不允许猜。
+凡是 agent **没法**从代码、测试、工具里证明的——线上计费状态、生产配置、凭据——一律不会被写进规则,而是标成 `needs-user` 等你确认。不允许猜。
 
-## 代码一直在变,它怎么保持诚实
+**日常使用,你基本不用管。** agent 读 `AGENTS.md`,按索引只加载这个任务用得上的文档——改到哪个区域,哪个领域的指针自动送上门。动手前查真实代码,跑 `.agent/command-contract.md` 里验证过的命令。中途停下时——不管接棒的是下次会话的自己,还是另一个 agent——写一份交接记录(`.agent/work/current.md`:目标、基线 commit、哪些核实了、哪些没有),接手的从 `git status` 和 diff 重建现场——交接记录只当参考,不当证据。
 
-这是防止规则腐烂的那一个机制。非琐碎改动之后,智能体运行:
+**保持新鲜,靠一个收件箱。** 防止规则慢慢烂掉,靠的就是这一个机制。每次像样的改动之后,agent 跑两个脚本:
 
 ```bash
-python3 scripts/check-doc-drift.py       # 报告这次改动可能弄旧了哪些文档
-python3 scripts/suggest-rule-updates.py  # 把候选写进 .agent/rule-candidates.md
+python3 scripts/check-doc-drift.py       # 列出这次改动可能弄旧了哪些文档
+python3 scripts/suggest-rule-updates.py  # 往收件箱(.agent/rule-candidates.md)里写「候选」
 ```
 
-两个脚本**只报告、只建议**。随后智能体逐条裁决:
+**「候选」就是脚本写给 agent 的待办便条**:「代码这里变了,某条规则可能跟着过时了,去看一眼,做个决定。」脚本只提醒、从不直接改规则;agent 逐条处理,四选一:
 
-- `promoted`——核实为真,写进规则。
-- `checked-unchanged`——看过了,无需改动。
-- `rejected`——过时或过于具体。
-- `needs-user`——高风险且无法核实,问人。
+- `promoted`——查实了,写进规则;
+- `checked-unchanged`——看过了,不用改;
+- `rejected`——不值得成为规则;
+- `needs-user`——查不了(比如涉及线上状态),留给你确认。
 
-脚本永远不会自己晋升任何东西。什么能成为规则,决定权在你。`.agent/rule-candidates.md` 就像一个收件箱,而且它的构造让捷径走不通:
+这个收件箱专门防糊弄:
 
-- 每个候选都和触发它的那批文件绑定(`drift:ui-copy@a1b2c3d` 里的 `@a1b2c3d` 后缀)。裁决只对这批文件有效——同一条规则之后命中**新文件**时,会出现一条新的 `pending` 项,而不是继承上周的结论。
-- `pending` 项既不会被重新扫描丢掉,也不会因提交而消失。提交不等于解决;哪怕未裁决的项已经随代码提交,收尾门禁照样拦截。
-- 只翻状态、不写真实裁决记录,是不算数的——下次扫描会自动打回 `pending`。
-- 裁决完的候选挪到文件底部的归档区,决策历史一直可读;标了 `rejected` 的就一直是 rejected,不会每次运行卷土重来。
-- 依赖和构建产物(`node_modules/`、`dist/` 等)永远不产生候选;套件自身安装文件触发的候选由安装器直接处理掉——新装的项目从干净的收件箱开始。
+- 每条候选跟触发它的那批文件绑定(`drift:ui-copy@a1b2c3d` 里的 `@a1b2c3d` 后缀)。同一条规则之后碰到**新文件**,会生成新的待办,不会沿用上周的结论。
+- 没处理的候选不会因为提交代码就消失——提交不等于解决,收尾门禁照样拦。
+- 只改状态、不写真实理由,不算数——下次扫描自动打回待办。
+- 处理完的挪到文件底部的归档区,历史一直可查;拒过的不会反复纠缠。
+- 依赖和构建产物(`node_modules/`、`dist/` 等)永远不产生候选;安装自身触发的候选由安装器直接处理掉——新装的项目从干净的收件箱开始。
 
-## 哪些是真强制,哪些不是
+当规则本身开始变得啰嗦或过时,`.agent/rule-health.md` 是修剪、合并、删除的指南。这套规则的本意是保持小巧,不是长成百科全书。
+
+## 哪些是真拦,哪些只是提醒
 
 对「强制」诚实,比看起来强制更重要。精确的分界:
 
 | 机制 | 触发条件 | 拦截? |
 | --- | --- | --- |
-| bash 守卫(PreToolUse,两边都有) | force push、`git reset --hard`、`rm -rf`(`node_modules`、`dist` 这类可随时重建的目录除外)、release/deploy/publish/submit——包括 `npx vercel deploy`、`sh -c "npm publish"` 这类包装写法——改动生产环境状态的命令、通过真实数据库 CLI(`psql`、`mysql`)执行的破坏性 SQL | **拦** —— exit 2;旁路 `RULES_HOOK_ALLOW_RISK=1` |
-| 收尾门禁(Stop,两边都有) | `.agent/rule-candidates.md` 里还有未裁决的候选——无论来自当前 diff,还是早前已经随代码提交 | **拦** —— 列出 pending 的 ID 和复查命令;智能体会继续干活并逐条解决(Stop 拦截的语义是「接着做完」,不是「停机」);旁路 `RULES_HOOK_ALLOW_PENDING=1` |
+| bash 守卫(PreToolUse,两边都有) | force push;`git reset --hard`;`rm -rf`(`node_modules`、`dist` 这类可随时重建的目录除外);发布/部署类命令(release、deploy、publish、submit,包括 `npx vercel deploy`、`sh -c "npm publish"` 这类包装写法);改动生产环境状态的命令;通过真实数据库 CLI(`psql`、`mysql`)执行的破坏性 SQL | **拦** —— exit 2;旁路 `RULES_HOOK_ALLOW_RISK=1` |
+| 收尾门禁(Stop,两边都有) | 收件箱里还有没处理的候选——无论来自当前 diff,还是早前已经随代码提交 | **拦** —— 列出待办的 ID 和复查命令;agent 会继续干活并逐条处理(Stop 拦截的语义是「接着做完」,不是「停机」);旁路 `RULES_HOOK_ALLOW_PENDING=1` |
 | 文档漂移报告 | 按需运行;收尾门禁拦截时也会一并给出 | 不拦 —— 仅列出待复查文档 |
 | 映射表自检 | (适配后)drift-map 里某条具体路径在仓库中匹配不到任何文件——通常意味着目录被改名 | 不拦 —— 一行警告,提示映射表本身过时了 |
 | 领域路由(PostToolUse,仅 Codex) | 首次编辑触及某个映射区域 | 不拦 —— 一行指针 |
-| 其余一切——质量闭环、事实来源顺序、工作流 | 文字合同 | 不拦 —— 靠智能体判断,这是设计如此 |
+| 其余一切——质量闭环、事实优先级、工作流 | 文字约定 | 不拦 —— 靠 agent 判断,这是设计如此 |
 
-也就是说:真正的硬门只有窄范围的 bash 守卫和收尾门禁。「别信过时文档」「闭环才算完成」是智能体因为合同这么写而遵守的指引——套件让正确的时机更容易被抓住,但它不证明正确性。两个钩子都带防循环开关(`stop_hook_active`),不会无限拦下去。
+也就是说:真正会拦下来的只有两道——窄范围的 bash 守卫,和收尾门禁。「别信过时文档」「把活做完整」靠的是 agent 守约定——这套规则让正确的时机更容易被抓住,但它不证明正确性。收尾门禁带防循环开关(`stop_hook_active`),不会无限拦下去。
 
-## 安装
+## token 账
 
-上面那一条命令(`agent-install-rules.sh --target <project>`)覆盖绝大多数情况。几个具体说明:
+规则要是把上下文塞满了,就帮了倒忙。所以:
 
-**只用一个智能体(Claude *或* Codex)。** 按正常方式装——安装器总是写入两边的文件。用你的那套就行;另一套在对应工具不运行时完全无感,校验也要求两套都存在。
+- **常驻的只有一份约 35 行的 `AGENTS.md`**,固定成本就这一项。
+- 领域文档**碰到对应文件才加载**:Claude 靠读到匹配文件时自动加载的小指针,Codex 靠编辑后钩子注入的同一条指针(每个区域每次会话只提示一次)。
+- 技能**被调用才展开**;收尾时脚本**机械地列出**「这次 diff 对应哪几份文档」,agent 照单取用,不用整个目录都读。
 
-**全新 / 空仓库。** 从第一个提交就能用。初始扫描会报告 `none detected`,适配很轻:智能体主要是和你确认产品意图,把未知项标成 `needs-user`。项目刚起步时正是装它的最佳时机。
-
-**已有规则的存量项目。** 加 `--force`;旧的 `AGENTS.md`、`CLAUDE.md`、`.agent/` 等会备份到 `.rules-kit/backups/`,并在适配时被当作线索读取。如果旧的 `.claude/settings.json` 或 `.codex/hooks.json` 里有你自定义的钩子、权限或命令,安装器会明确警告,适配工作流会从备份把它们合并回来:
-
-```bash
-/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --force
-```
-
-**升级套件。** `--upgrade` 只替换套件自身的工具文件(三个脚本、钩子、技能、工作流文档),绝不碰智能体适配过的内容(`product-invariants.md`、`user-journeys.md`、`command-contract.md`、`drift-map.yml`,以及正在生效的 `settings.json`/`hooks.json`)。被替换的文件会先备份:
-
-```bash
-/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --upgrade
-```
-
-**卸载。** 把安装器写入的文件删掉,需要的内容从最早的那份备份恢复(较新的备份里可能是上一次套件安装,不是你的原始文件):`AGENTS.md`、`CLAUDE.md`、`.agent/`、`.agents/`、`.claude/`、`.codex/`、`scripts/` 下的三个套件脚本(`check-doc-drift.py`、`bootstrap-project-context.py`、`suggest-rule-updates.py`——`scripts/` 里其余文件是你自己的),最后删 `.rules-kit/`。
-
-**校验安装:**
-
-```bash
-# 结构就位:
-/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project
-# 智能体真的适配过了,而不是只装了个壳:
-/path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
-```
-
-校验查的是**形式,不是正确性**——状态字段填了没有、模板占位符清没清干净、drift-map 的 glob 是否仍与 `.claude/rules/*` 镜像一致、候选带着真实的裁决记录解决了没有。它无法判断智能体写的事实对不对;那是智能体和你的责任。
-
-## 适配之后的日常使用
-
-日常工作中,智能体读 `AGENTS.md`,经 `.agent/index.md` 路由,只加载任务需要的部分——碰到文件时领域指针会自动送上门。它动手前先查真实代码,跑 `.agent/command-contract.md` 里已核实的命令,收尾前把候选收件箱处理干净。
-
-双智能体接力时:一个智能体中途停下,就写 `.agent/work/current.md`(目标、基线 commit、哪些核实了、哪些没有)。下一个接手的——Claude 或 Codex——从 `git status` 和 diff 重建状态,把交接笔记当意图参考,不当事实证明。
-
-当规则本身开始显得吵闹或过时,`.agent/rule-health.md` 是修剪、合并、删除的指南。这套套件的本意是保持小巧,而不是长成百科全书。
+一个普通任务的开销 = 约定本身 + 实际碰到的领域 + 一段任务结束时的固定检查(文档漂移报告和收件箱,一两千 token,与任务大小无关)。匹配按词边界算:`ProductCard.tsx` 不会因为带着 "prod" 就触发盯生产环境的规则,UI 目录之外的工具文件也不会被唠叨文案问题。
 
 ## 设计哲学
 
-一切的底层是一个想法:**智能体是裁判,套件是证据收集员。**
+一句话:**agent 是裁判,这套规则是证据收集员。**
 
-- 事实来源顺序:你的当前指令 → 当前代码/配置/测试/工具/线上状态 → 共享的 `.agent/` 文档 → README、issue、旧交接和记忆。
-- Claude 或 Codex 的私有记忆是个人提示,永远不是共享项目事实。持久事实放在仓库里,每个智能体都看得见。
-- Context 不是强制(Anthropic 官方的提法):Markdown 引导智能体;两个窄钩子负责拦;测试和真实工具负责证明。
-- 技能、领域指针、MCP/工具都是加载器和证据通道,不是规则本体。持久规则待在仓库可见的 Markdown 里。
-- 嘈杂的探测器喂一个会拦截的门,只会训练出「无脑盖章」——所以探测做到词边界级精确,警告和报告永远不拦。
+- 事实优先级:你现在的指令 → 当前代码/配置/测试/工具/线上状态 → 仓库里的共享文档 → README、issue、旧交接和记忆。
+- Claude 或 Codex 的私有记忆是个人小抄,不是共享事实。要让两边都遵守的事,写进仓库里谁都看得见的文件。
+- 文字负责引导,两个范围很窄的钩子负责拦,测试和真实工具负责证明——三件事不混为一谈(Context 不是强制,这也是 Anthropic 官方的提法)。
+- 探测要是不准,拦截就成了「狼来了」,agent 学会的只有无脑盖章——所以探测求准(词边界级),警告和报告永远不拦人。
 
 ## 参考
 
@@ -195,24 +169,28 @@ python3 scripts/suggest-rule-updates.py  # 把候选写进 .agent/rule-candidate
 <summary><strong>安装清单(文件地图)</strong></summary>
 
 ```text
-AGENTS.md                     共享合同;Codex 启动时读,Claude 经 @import 读
+AGENTS.md                     共享约定;Codex 启动时读,Claude 经 @import 读
 CLAUDE.md                     极薄的 Claude 入口,导入 @AGENTS.md
 .agent/
-  index.md                    路由表:只加载任务需要的
+  index.md                    索引:只加载任务需要的
   adaptation-review.md        Status: pending | adapted;以及 needs-user 项
   product-invariants.md       持久的产品承诺
-  user-journeys.md            主流程与待闭合的链路
-  command-contract.md         已核实的命令(+ 生成的候选)
-  quality-gates.md            定义「完成」的那些闭环
+  user-journeys.md            主流程与要接通的链路
+  command-contract.md         验证过的命令(+ 生成的候选)
+  quality-gates.md            定义「做完」的那些链路
   domains/*.md                ui-copy、data-sync、build-test、release、localization、performance
   workflows/*.md              adapt-rules、implement、review、continue、release
-  drift-map.yml               改动路径 → 待复查文档;同时驱动按需路由
-  rule-candidates.md          候选收件箱:脚本写入,智能体裁决
+  drift-map.yml               改动路径 → 待复查文档;同时驱动按需加载
+  rule-candidates.md          候选收件箱:脚本写入,agent 决定
   rule-health.md              何时修剪、合并、删除规则
+  project-map.md 等           初始扫描的产出(还有 bootstrap-report.md,都是线索)
+  handoff-template.md / work/ 交接记录的模板和存放处
+  decisions/                  值得留给后来者的持久决策
+  doc-drift.md、*-policy.md   机制与策略说明,按需读
 .claude/
-  rules/*.md                  3 行的路径域指针;读到匹配文件时自动加载
-  skills/*/SKILL.md           规范的薄工作流加载器(8 个)
-  agents/*.md                 reviewer / qa / docs-drift-checker 子智能体
+  rules/*.md                  路径指针;读到匹配文件时自动加载
+  skills/*/SKILL.md           薄工作流入口(8 个,Codex 那份由这边生成)
+  agents/*.md                 reviewer / qa / docs-drift-checker 子 agent
   hooks/*.py + settings.json  bash 守卫 + 收尾门禁
 .agents/skills/*              Codex 技能树——安装时由 .claude/skills 生成
 .codex/
@@ -220,7 +198,7 @@ CLAUDE.md                     极薄的 Claude 入口,导入 @AGENTS.md
 scripts/*.py                  bootstrap-project-context、check-doc-drift、suggest-rule-updates
 ```
 
-建议提交进 git:`AGENTS.md`、`CLAUDE.md`、`.agent/`、`.agents/`、`.claude/`、`.codex/`、`scripts/`。`.agent/work/*`(交接笔记)保持本地,除非你有意共享:
+建议提交进 git:`AGENTS.md`、`CLAUDE.md`、`.agent/`、`.agents/`、`.claude/`、`.codex/`、`scripts/`。`.agent/work/*`(交接记录)保持本地,除非你有意共享:
 
 ```gitignore
 .agent/work/*
@@ -232,10 +210,10 @@ scripts/*.py                  bootstrap-project-context、check-doc-drift、sugg
 <details>
 <summary><strong>完整生命周期:安装 → 初始扫描 → 适配 → 校验 → 生长</strong></summary>
 
-1. **安装** —— `agent-install-rules.sh` 拷贝模板,由规范的 Claude 技能树生成 Codex 技能树,在 `.agent/rules-kit.json` 记录元数据,备份已有规则文件,并运行初始扫描。此时项目是「已安装」,不是「已适配」:`.agent/adaptation-review.md` 仍是 `Status: pending`。
+1. **安装** —— `agent-install-rules.sh` 拷贝模板,以 Claude 技能树为准生成 Codex 技能树,在 `.agent/rules-kit.json` 记录元数据,备份已有规则文件,并运行初始扫描。此时项目是「已安装」,不是「已适配」:`.agent/adaptation-review.md` 仍是 `Status: pending`。
 2. **初始扫描(bootstrap)** —— `bootstrap-project-context.py` 扫描当前文件/配置,**只写线索**到 `project-map.md`、`command-contract.md`、`bootstrap-report.md` 和 `rule-candidates.md`。一个叫 `sync.ts` 的文件是*信号*,不是「云同步已核实」的证明。
-3. **适配**(智能体驱动)—— 按 `.agent/workflows/adapt-rules.md`,智能体检查当前代码、配置、测试和旧备份,只把**核实过的事实**晋升进 `.agent/*`,把 drift-map 的 glob 收紧到项目真实路径,并镜像进 `.claude/rules/*`。无法证明的高风险事实标 `needs-user`。
-4. **校验** —— `validate-installed-project.sh` 检查结构齐全、`CLAUDE.md` 导入了 `@AGENTS.md`、Codex 技能树与规范树一致、脚本可执行,以及(带严格参数时)适配状态和候选都已解决。查形式,不查正确性。
-5. **生长**(智能体驱动)—— 代码变化时,两个扫描脚本浮出可能过时的文档和新的规则候选;智能体逐条晋升、确认未变、拒绝,或标 `needs-user`。
+3. **适配**(agent 驱动)—— 按 `.agent/workflows/adapt-rules.md`,agent 检查当前代码、配置、测试和旧备份,只把**核实过的事实**写进 `.agent/*`,把 drift-map 的 glob 收紧到项目真实路径,并镜像进 `.claude/rules/*`。无法证明的高风险事实标 `needs-user`。
+4. **校验** —— `validate-installed-project.sh` 检查结构齐全、`CLAUDE.md` 导入了 `@AGENTS.md`、Codex 技能树与 Claude 那份一致、脚本可执行,以及(带严格参数时)适配状态、占位符和候选都已处理。查形式,不查正确性。
+5. **生长**(agent 驱动)—— 代码变化时,两个扫描脚本浮出可能过时的文档和新的候选;agent 逐条查实、确认未变、拒绝,或标 `needs-user`。
 
 </details>

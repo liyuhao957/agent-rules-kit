@@ -173,7 +173,7 @@ run() {
 
 if [[ "$upgrade" -eq 1 ]]; then
   backup_dir="$target/.rules-kit/backups/rules-upgrade-$timestamp"
-  echo "Upgrading Rules kit machinery to $version in $target"
+  echo "Upgrading Relay Rules tooling to $version in $target"
 
   # Kit machinery only. Agent-adapted content (.agent/product-invariants.md,
   # user-journeys.md, command-contract.md, drift-map.yml, adaptation-review.md,
@@ -274,7 +274,7 @@ EOF
     bash "$rules_root/scripts/validate-installed-project.sh" "$target"
   fi
 
-  echo "Rules kit machinery upgraded to $version."
+  echo "Relay Rules tooling upgraded to $version."
   echo "Agent-adapted content (.agent docs, drift-map, domains, AGENTS.md, CLAUDE.md, .claude/rules/, active hook configs) was not modified."
   echo "Backup of replaced kit files: $backup_dir"
   exit 0
@@ -282,7 +282,7 @@ fi
 
 backup_dir="$target/.rules-kit/backups/rules-install-$timestamp"
 
-echo "Installing Rules kit $version into $target"
+echo "Installing Relay Rules $version into $target"
 
 if [[ ${#existing[@]} -gt 0 && "$backup" -eq 1 ]]; then
   echo "Backing up existing rule paths to $backup_dir"
@@ -377,10 +377,10 @@ if [[ "$dry_run" -ne 1 && ${#existing[@]} -gt 0 && "$backup" -eq 1 ]]; then
 fi
 
 if [[ "$bootstrap" -eq 1 ]]; then
-  echo "Rules kit installed and bootstrapped."
+  echo "Relay Rules installed and bootstrapped."
   echo "Status: pending agent adaptation. A Claude/Codex agent must run .agent/workflows/adapt-rules.md and mark .agent/adaptation-review.md as adapted before these are treated as project rules."
 else
-  echo "Rules kit installed."
+  echo "Relay Rules installed."
   echo "Status: pending agent adaptation. Next, run python3 scripts/bootstrap-project-context.py, then have Claude/Codex follow .agent/workflows/adapt-rules.md."
 fi
 echo "One-time setup: restart the agent session so new skills are discovered, and approve project hooks on first use (Claude: settings approval; Codex: trust .codex and review via /hooks). Hooks are inert until trusted."

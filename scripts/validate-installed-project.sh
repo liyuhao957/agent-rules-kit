@@ -265,4 +265,4 @@ PY
   fi
 fi
 
-echo "OK: Rules kit installation is valid at $target"
+echo "OK: Relay Rules installation is valid at $target"
