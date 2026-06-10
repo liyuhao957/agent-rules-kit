@@ -53,7 +53,7 @@ Depending on your project's state, there are three ways to install:
 - **Your project already has its own `AGENTS.md` / `CLAUDE.md` / `.claude/`** — add `--force`. Your old files are backed up to `.rules-kit/backups/` before being replaced, and get read as clues during adaptation. If your old settings had custom hooks or permissions, the installer warns you and the adaptation workflow merges them back.
 - **Installed before, new version out** — add `--upgrade`. Only the bundled scripts, hooks, skills, and workflow docs are updated; the project facts you filled in are not touched, and replaced files are backed up first. Structure the old install predates (like the `.claude/rules/` pointers) gets seeded automatically, with globs mirrored from your drift-map. If the new version added contract text to files you adapted, validation lists each missing piece at the end — have the agent merge those once from the template, then re-validate.
 
-Two one-time steps after install: restart the agent session (so new skills are discovered), and approve the project hooks — Claude Code asks about project settings; Codex needs you to trust the project's `.codex/` directory and take a look at `/hooks`. **Until approved, the hooks do nothing.**
+Two one-time steps after install (and after an upgrade): restart the agent session (so new skills are discovered), and approve the project hooks — Claude Code asks about project settings; if no prompt appears, check `/hooks`. Codex needs you to trust the project's `.codex/` directory and take a look at `/hooks`. **Until approved, the hooks do nothing.**
 
 To confirm the install:
 
