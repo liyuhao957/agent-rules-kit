@@ -32,6 +32,34 @@ READ_ONLY_COMMANDS = {
     "tail",
     "wc",
 }
+EPHEMERAL_DELETE_DIRS = {
+    "node_modules",
+    "dist",
+    "build",
+    "out",
+    "coverage",
+    ".next",
+    ".nuxt",
+    ".turbo",
+    ".cache",
+    ".parcel-cache",
+    "__pycache__",
+    ".pytest_cache",
+    "DerivedData",
+}
+REMOTE_DB_COMMANDS = {"psql", "mysql", "mariadb", "mongosh"}
+WARNING_WORDS = {
+    "deploy",
+    "release",
+    "publish",
+    "push",
+    "submit",
+    "delete",
+    "reset",
+    "production",
+    "prod",
+}
+HEREDOC_OPEN = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)(\w+)\1")
 
 
 def bypass_enabled() -> bool:
@@ -69,6 +97,20 @@ def payload_command() -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
+def strip_heredoc_bodies(command: str) -> str:
+    """Drop heredoc body lines so document text is not matched as commands."""
+    kept: list[str] = []
+    pending: list[str] = []
+    for line in command.split("\n"):
+        if pending:
+            if line.strip() == pending[0]:
+                pending.pop(0)
+            continue
+        kept.append(line)
+        pending = [match.group(2) for match in HEREDOC_OPEN.finditer(line)]
+    return "\n".join(kept)
+
+
 def command_segments(command: str) -> list[str]:
     return [segment.strip() for segment in re.split(r"\n|&&|\|\||;", command) if segment.strip()]
 
@@ -80,6 +122,36 @@ def split_command(command: str) -> list[str]:
         return command.split()
 
 
+def unwrap_runners(tokens: list[str]) -> list[str]:
+    """Peel npx/bunx/env and pnpm/yarn dlx so wrapped commands are checked directly."""
+    rest = list(tokens)
+    while rest:
+        first = basename(rest[0])
+        if first in {"npx", "bunx", "env"}:
+            tail = rest[1:]
+            while tail and (tail[0].startswith("-") or (first == "env" and "=" in tail[0])):
+                tail = tail[1:]
+            rest = tail
+            continue
+        if first in {"pnpm", "yarn"} and len(rest) > 1 and rest[1] == "dlx":
+            rest = rest[2:]
+            continue
+        break
+    return rest
+
+
+def shell_inline_command(tokens: list[str]) -> str:
+    """Return the string passed to sh/bash/zsh -c, or "" when there is none."""
+    if not tokens or basename(tokens[0]) not in {"sh", "bash", "zsh"}:
+        return ""
+    for index, token in enumerate(tokens[1:], start=1):
+        if not token.startswith("-"):
+            return ""
+        if not token.startswith("--") and "c" in token:
+            return tokens[index + 1] if index + 1 < len(tokens) else ""
+    return ""
+
+
 def is_read_only_lookup(tokens: list[str]) -> bool:
     if not tokens:
         return False
@@ -89,10 +161,28 @@ def is_read_only_lookup(tokens: list[str]) -> bool:
     return first == "git" and len(tokens) > 1 and tokens[1] in {"diff", "show", "status", "log", "grep"}
 
 
+def is_ephemeral_delete_target(value: str) -> bool:
+    if value.startswith(("/", "~")):
+        return False
+    parts = PurePath(value).parts
+    if not parts or ".." in parts:
+        return False
+    return parts[0] in EPHEMERAL_DELETE_DIRS
+
+
 def has_rm_rf(tokens: list[str]) -> bool:
     if not tokens or basename(tokens[0]) != "rm":
         return False
-    return any(token.startswith("-") and "r" in token and "f" in token for token in tokens[1:])
+    flags = [token for token in tokens[1:] if token.startswith("-")]
+    short_flags = "".join(flag for flag in flags if not flag.startswith("--"))
+    recursive = "--recursive" in flags or "r" in short_flags or "R" in short_flags
+    force = "--force" in flags or "f" in short_flags
+    if not (recursive and force):
+        return False
+    targets = [token for token in tokens[1:] if not token.startswith("-")]
+    if targets and all(is_ephemeral_delete_target(target) for target in targets):
+        return False
+    return True
 
 
 def has_git_clean_force(tokens: list[str]) -> bool:
@@ -138,12 +228,25 @@ def has_prod_mutation(tokens: list[str]) -> bool:
     return has_prod and has_mutation and first in {"kubectl", "terraform", "supabase", "firebase", "psql", "mysql"}
 
 
+def segment_words(segment: str) -> set[str]:
+    """Lowercased whole words with camelCase boundaries split, so "prod" never
+    matches ProductCard."""
+    split_camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", segment)
+    split_acronym = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "-", split_camel)
+    return set(re.findall(r"[a-z0-9]+", split_acronym.lower()))
+
+
 def segment_reasons(segment: str, tokens: list[str]) -> list[str]:
     text = segment.lower()
+    tokens = unwrap_runners(tokens)
     reasons: list[str] = []
 
     if is_read_only_lookup(tokens):
         return reasons
+
+    inline = shell_inline_command(tokens)
+    if inline:
+        reasons.extend(blocked_reasons(inline))
 
     if re.search(r"\bgit\s+push\b(?=.*(?:--force-with-lease|--force|-f\b))", text, flags=re.DOTALL):
         reasons.append("force-pushing changes")
@@ -157,7 +260,9 @@ def segment_reasons(segment: str, tokens: list[str]) -> list[str]:
         reasons.append("release, deploy, publish, or submit action")
     if has_prod_mutation(tokens):
         reasons.append("production-targeted mutation")
-    if re.search(r"\b(drop\s+database|drop\s+table|truncate\s+table|delete\s+from)\b", text):
+    if tokens and basename(tokens[0]) in REMOTE_DB_COMMANDS and re.search(
+        r"\b(drop\s+database|drop\s+table|truncate\s+table|delete\s+from)\b", text
+    ):
         reasons.append("destructive database statement")
 
     return reasons
@@ -165,7 +270,7 @@ def segment_reasons(segment: str, tokens: list[str]) -> list[str]:
 
 def blocked_reasons(command: str) -> list[str]:
     reasons: list[str] = []
-    for segment in command_segments(command):
+    for segment in command_segments(strip_heredoc_bodies(command)):
         tokens = split_command(segment)
         for reason in segment_reasons(segment, tokens):
             if reason not in reasons:
@@ -176,13 +281,11 @@ def blocked_reasons(command: str) -> list[str]:
 def warning_needed(command: str, reasons: list[str]) -> bool:
     if reasons:
         return True
-    for segment in command_segments(command):
+    for segment in command_segments(strip_heredoc_bodies(command)):
         tokens = split_command(segment)
         if is_read_only_lookup(tokens):
             continue
-        text = segment.lower()
-        warning_words = ("deploy", "release", "publish", "push", "submit", "delete", "reset", "production", "prod")
-        if any(word in text for word in warning_words):
+        if WARNING_WORDS & segment_words(segment):
             return True
     return False
 

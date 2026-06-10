@@ -6,24 +6,16 @@ Changing build setup, tests, local runtime, simulator/device flows, CI, scripts,
 
 ## Verify Before Editing
 
-- Current project files and scripts.
-- Current available runtimes/devices/services.
-- Existing test command patterns.
-- Whether commands in docs are stale.
-- `.agent/command-contract.md` for current command inventory.
+- Current project files, scripts, and available runtimes/devices/services.
+- `.agent/command-contract.md` for the current command inventory; verify a documented command still exists before relying on it.
 
 ## Do
 
-- Prefer targeted validation first; broaden when risk is high.
-- Report exact commands/checks run and their result.
+- Targeted validation first; broaden when risk is high. Report exact commands run and their results.
 - Update `.agent/command-contract.md` when a durable command changes.
-- If a device or service is unavailable, separate environment failure from code failure.
-
-## Do Not
-
-- Claim a build/test/device path passed without current output.
-- Update generated files manually when the project has a generator unless the workflow explicitly requires it.
+- Separate environment failure from code failure when a device or service is unavailable.
+- Use the generator for generated files unless the workflow explicitly requires manual edits.
 
 ## Done Means
 
-The affected build/test/runtime path has current evidence, or the final reply clearly states what could not be verified.
+The affected build/test/runtime path has current evidence, or the final reply clearly states what could not be verified. No pass claims without current output.

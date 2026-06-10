@@ -11,11 +11,17 @@ python3 scripts/check-doc-drift.py
 python3 scripts/suggest-rule-updates.py
 ```
 
-The drift script reads `.agent/drift-map.yml`, checks current git changes, and reports which shared docs may need review. `suggest-rule-updates.py` writes those signals into `.agent/rule-candidates.md` along with command, backup, and high-risk candidates.
+Resolution protocol (statuses, real-notes requirement, archive): `.agent/index.md` (At Finalize). A candidate is a review signal, not proof that docs must change — decide from current evidence.
 
-The same drift-map globs drive on-demand loading (`.claude/rules/*.md` for Claude, the Codex PostToolUse router for Codex). When you change globs in `.agent/drift-map.yml`, mirror them into `.claude/rules/*.md` frontmatter.
+## How The Engine Behaves
 
-A candidate is a review signal, not proof that docs must change. The agent should decide autonomously from current evidence and mark each candidate `promoted`, `checked-unchanged`, `rejected`, or `needs-user`.
+- `check-doc-drift.py` reads `.agent/drift-map.yml` against current git changes and lists the shared docs mapped to your diff. The same globs drive on-demand loading (`.claude/rules/*.md` for Claude, the Codex PostToolUse router); when you change globs in the map, mirror them into `.claude/rules/*.md` frontmatter.
+- After adaptation, the checker warns when a literal drift-map glob matches no repo file — the signal that the map went stale after a rename. Renames also fire the old path's rule once (`--no-renames`).
+- Candidate ids are `<id>@<evidence-key>`; new evidence for the same rule resets the candidate to pending, with no status inheritance.
+- Pending candidates are never dropped by regeneration; they carry forward until resolved. Committing does not clear them, and the Stop gate blocks on committed-but-pending items too.
+- Resolved candidates move to a compact archive section in `.agent/rule-candidates.md` (the audit trail); rejected items stay suppressed. A status flipped to resolved without a real decision note reverts to pending on the next scan.
+- Edits touching only `.agent/*` docs are auto-classified `checked-unchanged` ("rule-doc maintenance"), so promotions do not spawn review-the-review rounds.
+- Vendor dirs (`node_modules`, `dist`, ...) never produce candidates.
 
 ## Update Docs When Changing
 
@@ -25,17 +31,12 @@ A candidate is a review signal, not proof that docs must change. The agent shoul
 - Localization, user-facing copy policy, or supported language behavior.
 - Cross-agent handoff, review, verification, skills, hooks, or tool policy.
 - Validation command inventory in `.agent/command-contract.md`.
-- Auto-generated context in `.agent/project-map.md` or `.agent/bootstrap-report.md`.
 - Rule scope, rule health, or drift-map behavior.
 - Repeated pitfall that future agents are likely to hit again.
 
 ## Do Not Update Docs For
 
-- One-off implementation details.
-- Temporary experiments.
-- Obvious facts easy to rediscover from code.
-- Speculation about future features.
-- Cleanup that does not change durable behavior.
+One-off implementation details, temporary experiments, facts easy to rediscover from code, speculation about future features, or cleanup that does not change durable behavior.
 
 ## If Docs Are Stale
 
@@ -43,11 +44,4 @@ If stale docs affected the task, fix them when in scope. If not in scope, mentio
 
 ## Final Reply Expectation
 
-When the drift check reports candidates, say one of:
-
-- Updated: the relevant shared doc was changed.
-- Checked unchanged: reviewed the suggested doc and it still applies.
-- Out of scope: the signal was real but the doc update is not part of this task.
-- Not checked: explain why the check could not be completed.
-
-Do not leave `.agent/rule-candidates.md` with `Status: pending` for ordinary completed work.
+For each drift signal say one of: updated, checked unchanged, out of scope, or not checked (with why). Do not leave `.agent/rule-candidates.md` with `Status: pending` for ordinary completed work.

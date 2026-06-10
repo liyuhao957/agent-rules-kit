@@ -10,8 +10,11 @@ Claude Code does not need this hook; `.claude/rules/*.md` path-scoped rules
 cover the same routing natively.
 
 Noise control: each drift-map rule fires at most once per session (state is
-kept in the system temp dir, keyed by session_id). On any unexpected payload
-or error the hook stays silent and exits 0 — it is a router, not a gate.
+kept in the system temp dir, keyed by session_id; stale state files are pruned
+after 7 days). Only known path fields and apply_patch markers count as touched
+paths — file content that merely mentions a path does not fire a pointer. On
+any unexpected payload or error the hook stays silent and exits 0 — it is a
+router, not a gate.
 """
 
 from __future__ import annotations
@@ -21,10 +24,19 @@ import json
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 
 MAX_DOCS_PER_RULE = 2
+STATE_MAX_AGE_SECONDS = 7 * 86400
+
+# Only these tool_input fields are treated as touched paths. Free-form fields
+# (file content, diff bodies) must not fire pointers: a README line that merely
+# mentions `src/components/X.tsx` is not an edit in that area.
+PATH_KEYS = ("file_path", "path", "notebook_path", "target")
+PATH_LIST_KEYS = ("paths", "files")
+PATCH_MARKER = re.compile(r"^\*\*\* (?:Add|Update|Delete|Move to) File: (.+)$", re.MULTILINE)
 
 
 def stdin_payload() -> dict:
@@ -55,15 +67,23 @@ def extract_strings(value: object) -> list[str]:
 
 
 def candidate_paths(payload: dict) -> list[str]:
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return []
     cwd = str(payload.get("cwd") or "")
     paths: set[str] = set()
-    for text in extract_strings(payload.get("tool_input")):
-        # apply_patch carries paths inside patch markers.
-        for match in re.findall(r"\*\*\* (?:Add|Update|Delete|Move to) File: (.+)", text):
-            paths.add(match.strip())
-        # Edit/Write carry plain path strings; keep only path-shaped values.
-        if "\n" not in text and ("/" in text or re.search(r"\.[A-Za-z0-9]{1,12}$", text)):
-            paths.add(text.strip())
+    # Edit/Write/notebook tools carry the touched path under a known key.
+    for key in PATH_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            paths.add(value.strip())
+    for key in PATH_LIST_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, list):
+            paths.update(item.strip() for item in value if isinstance(item, str) and item.strip())
+    # apply_patch carries paths inside explicit per-file patch markers.
+    for text in extract_strings(tool_input):
+        paths.update(match.strip() for match in PATCH_MARKER.findall(text))
     normalized: list[str] = []
     for path in paths:
         if cwd and path.startswith(cwd.rstrip("/") + "/"):
@@ -109,6 +129,17 @@ def seen_state_path(session_id: str) -> Path:
     return Path(tempfile.gettempdir()) / f"rules-domain-router-{safe}.json"
 
 
+def cleanup_stale_state() -> None:
+    """Best-effort prune of router state files from sessions older than 7 days."""
+    try:
+        cutoff = time.time() - STATE_MAX_AGE_SECONDS
+        for stale in Path(tempfile.gettempdir()).glob("rules-domain-router-*.json"):
+            if stale.stat().st_mtime < cutoff:
+                stale.unlink()
+    except OSError:
+        pass
+
+
 def load_seen(path: Path) -> set[str]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -125,6 +156,7 @@ def save_seen(path: Path, seen: set[str]) -> None:
 
 
 def main() -> int:
+    cleanup_stale_state()
     payload = stdin_payload()
     paths = candidate_paths(payload)
     if not paths:

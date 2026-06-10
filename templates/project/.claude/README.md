@@ -20,6 +20,6 @@ One-time setup after install:
 - Claude Code asks you to approve project settings/hooks on first use; until approved, the hooks are inert.
 - Restart the Claude Code session after install so new skills and subagents are discovered.
 
-By default, hooks block only narrow high-risk cases and otherwise stay quiet: force pushes, `git reset --hard`, `rm -rf`, release/deploy/publish/submit actions, production mutations, and finalizing non-trivial changes while `.agent/rule-candidates.md` still has pending candidates. The doc-drift report is advisory and never blocks.
+By default, hooks block only narrow high-risk cases and otherwise stay quiet: force pushes, `git reset --hard`, `rm -rf`, release/deploy/publish/submit actions, production mutations, and finishing while `.agent/rule-candidates.md` still has pending candidates — including pending items that were committed unresolved; committing is not a bypass. The doc-drift report is advisory output that only appears inside a Stop-block message.
 
 Use `RULES_HOOK_ALLOW_RISK=1` or `RULES_HOOK_ALLOW_PENDING=1` only for an intentional operation after explicit review.

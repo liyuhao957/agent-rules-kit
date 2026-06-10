@@ -1,6 +1,9 @@
 ---
 paths:
   - "package.json"
+  - "pnpm-lock.yaml"
+  - "yarn.lock"
+  - "package-lock.json"
   - "Project.swift"
   - "project.yml"
   - "Package.swift"

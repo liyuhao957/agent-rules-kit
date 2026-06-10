@@ -6,6 +6,17 @@ Use this workflow immediately after installing Rules into a new or existing proj
 
 Convert installed generic Rules into project-specific working rules by inspecting current evidence. Do not treat bootstrap output, old docs, memory, or another agent's summary as proof.
 
+## Minimum Honest Adaptation
+
+MUST be done before marking `Status: adapted`:
+
+- `.agent/command-contract.md`: every row verified by running or locating the command in the current repo.
+- `.agent/drift-map.yml`: globs tightened to this project's real paths AND dead/unused default globs deleted; changes mirrored into `.claude/rules/*.md` frontmatter.
+- `.agent/rule-candidates.md`: every candidate resolved with real decision notes.
+- Adaptation checklist boxes ticked only for items actually performed.
+
+MAY be deferred with explicit `needs-user:` entries in `.agent/adaptation-review.md`: `.agent/product-invariants.md`, `.agent/user-journeys.md`. Deferring honestly is fine; ticking boxes for work not done is not.
+
 ## Steps
 
 1. Inspect the project root and git state.
@@ -16,7 +27,7 @@ Convert installed generic Rules into project-specific working rules by inspectin
    ```
 
 3. Read `.agent/bootstrap-report.md`, `.agent/project-map.md`, `.agent/command-contract.md`, `.agent/drift-map.yml`, and `.agent/adaptation-review.md`.
-4. If `.rules-kit/backups/` exists, read old `AGENTS.md`, `CLAUDE.md`, and relevant old `.agent/*` files as clues only.
+4. If `.rules-kit/backups/` exists, read old `AGENTS.md`, `CLAUDE.md`, and relevant old `.agent/*` files as clues only. If the backups contain a previous `.claude/settings.json` or custom hooks/commands, merge the user's entries back into the active config — the install must not silently drop them.
 5. Inspect current code/config/docs for:
    - product purpose and durable product promises
    - main user journeys and UI/copy conventions
@@ -25,19 +36,20 @@ Convert installed generic Rules into project-specific working rules by inspectin
    - release/external-state workflows
    - localization and supported languages
    - tool, MCP, browser, device, database, or remote dependencies
-6. Promote only verified, durable facts into:
+6. Grep README and `docs/**` claims — endpoints, commands, paths, setup steps — against current code. Record every conflict in `.agent/adaptation-review.md` under "Unverified / Needs User Confirmation".
+7. Promote only verified, durable facts into:
    - `.agent/product-invariants.md`
    - `.agent/user-journeys.md`
    - `.agent/command-contract.md`
    - relevant `.agent/domains/*`
-   - `.agent/drift-map.yml` — tighten the default globs to this project's real paths, then mirror them into `.claude/rules/*.md` frontmatter so Claude's auto-loading stays in step
-7. Put unverified, risky, remote, credential, device, pricing, production, or release facts into `.agent/adaptation-review.md` under "Unverified / Needs User Confirmation".
-8. Mark `.agent/adaptation-review.md`:
+   - `.agent/drift-map.yml` — tighten the default globs to this project's real paths, delete defaults that match nothing here, then mirror them into `.claude/rules/*.md` frontmatter so Claude's auto-loading stays in step
+8. Put unverified, risky, remote, credential, device, pricing, production, or release facts into `.agent/adaptation-review.md` under "Unverified / Needs User Confirmation".
+9. Mark `.agent/adaptation-review.md`:
    - `Status: adapted`
    - `Adapted by: <agent/tool and date>`
-   - check every completed evidence item
-9. Run `python3 scripts/suggest-rule-updates.py` and handle every candidate in `.agent/rule-candidates.md` without asking the user unless the current task depends on an unprovable high-risk fact.
-10. Run the validator from the rules-kit clone recorded in `.agent/rules-kit.json` (`source` field):
+   - check only the evidence items actually completed
+10. Run `python3 scripts/suggest-rule-updates.py` and resolve every candidate per `.agent/index.md` (At Finalize), without asking the user unless the current task depends on an unprovable high-risk fact.
+11. Run the validator from the rules-kit clone recorded in `.agent/rules-kit.json` (`source` field):
 
    ```bash
    bash <rules-kit-source>/scripts/validate-installed-project.sh . --require-adapted --require-candidates-reviewed

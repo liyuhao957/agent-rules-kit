@@ -40,6 +40,9 @@ Use these gates before finalizing implementation, review, continuation, or relea
 
 ## Drift Loop
 
-- If the change modifies durable project facts, update shared docs in the same task.
-- If docs are stale but not updated, mention the stale area and why.
-- Run `python3 scripts/check-doc-drift.py` when the repo has code/config/doc changes, then report whether suggested docs were updated, checked unchanged, out of scope, or not checked.
+- If the change modifies durable project facts, update shared docs in the same task; if stale docs are out of scope, name the stale area and why.
+- Run `python3 scripts/check-doc-drift.py` and report each signal as updated, checked unchanged, out of scope, or not checked (policy: `.agent/doc-drift.md`).
+
+## Rule Growth Loop
+
+- Resolve the candidate inbox before finalizing non-trivial work: protocol in `.agent/index.md` (At Finalize).

@@ -4,12 +4,7 @@ Use when taking over unfinished work from Claude, Codex, a human, or a prior ses
 
 ## Steps
 
-1. Inspect `git status` and current diff first.
-2. Read `.agent/work/current.md` if present.
-3. Treat handoff as intent and risk context, not proof.
-4. Reconstruct what changed from the actual files.
-5. Identify user-owned or unrelated local changes.
-6. Determine what is verified, inferred, and unverified.
-7. Continue with the relevant implement/review workflow.
-8. Update or clear the handoff when the state changes.
-
+1. Read `.agent/work/current.md` if present — it is intent and risk context, not proof.
+2. Reconstruct actual state from `git status`, the current diff, and the files themselves; protect user-owned local changes you cannot attribute.
+3. Check the candidate inbox: pending items in `.agent/rule-candidates.md` carry forward across commits and handoffs — they are part of the work you inherit (`.agent/index.md`, At Finalize).
+4. Continue via the implement or review workflow; update or clear the handoff when the state changes.

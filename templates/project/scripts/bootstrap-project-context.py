@@ -36,6 +36,11 @@ SKIP_DIRS = {
     ".next",
     ".venv",
     "venv",
+    "__pycache__",
+    ".pytest_cache",
+    "coverage",
+    ".turbo",
+    "Pods",
 }
 
 
@@ -206,7 +211,7 @@ def classify_paths(root: Path, files: list[Path]) -> dict[str, list[str]]:
     return {
         "ui": pick((r"/views?/", r"/components?/", r"/screens?/", r"/pages/", r"/layouts/", rf"{_B}view\.", rf"{_B}screen\.")),
         "models": pick((r"/models?/", r"/schemas?/", rf"{_B}schema{_E}", rf"{_B}migrations?{_E}")),
-        "services": pick((r"/services?/", rf"{_B}sync{_E}", rf"{_B}backups?{_E}", rf"{_B}(import|export)(er|ers)?{_E}")),
+        "services": pick((rf"{_B}services?{_E}", rf"{_B}api{_E}", rf"{_B}clients?{_E}", rf"{_B}sync{_E}", rf"{_B}backups?{_E}", rf"{_B}(import|export)(er|ers)?{_E}")),
         "tests": pick((r"/tests?/", r"/__tests__/", rf"{_B}tests?\.", rf"{_B}spec\.", r"\.test\.", r"\.spec\.")),
         "release": pick((rf"{_B}fastlane{_E}", rf"{_B}export-?options", r"\.entitlements$", r"\.github/workflows", rf"{_B}releases?{_E}", rf"{_B}deploy(ment)?s?{_E}", rf"{_B}signing{_E}")),
         "localization": pick((r"\.lproj/", r"/locales?/", r"/i18n/", r"/translations/", r"\.strings$", r"\.stringsdict$", r"\.xcstrings$", r"\.xliff$", r"\.arb$", r"\.po$")),
@@ -400,7 +405,7 @@ def generated_drift_block(paths: dict[str, list[str]]) -> str:
         "services": (
             "project-services",
             [".agent/domains/data-sync.md", ".agent/tool-policy.md", ".agent/quality-gates.md"],
-            "Project-specific service/sync/backup/import/export paths detected by bootstrap.",
+            "Project-specific service/api/client/sync/backup/import/export paths detected by bootstrap.",
         ),
         "tests": (
             "project-tests",

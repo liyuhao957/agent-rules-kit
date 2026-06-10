@@ -54,12 +54,12 @@ It works with **one agent or two**, and from **commit zero**. See [Install](#ins
 
 Rules only help if they don't drown the agent. The kit keeps the always-loaded footprint to one small file and routes everything else on demand:
 
-- **Always loaded:** `AGENTS.md` (~70 lines). That's the whole standing tax.
+- **Always loaded:** `AGENTS.md` (~35 lines). That's the whole standing tax.
 - **Loaded when files are touched:** Claude Code auto-loads a 3-line pointer from `.claude/rules/` when it reads a matching file (e.g. anything under `components/` points to `.agent/domains/ui-copy.md`). Codex, which has no path-scoped rules, gets the same pointer injected by a PostToolUse hook after an edit — once per area per session, one line each.
 - **Loaded when invoked:** skills carry only their name and description until used; each routes to one shared workflow doc.
 - **Listed mechanically:** after editing, `python3 scripts/check-doc-drift.py` prints exactly which shared docs map to the actual diff. The agent loads that list — not the whole `.agent/` directory.
 
-So an ordinary task costs the contract plus only the domains it actually touched. The same glob map (`.agent/drift-map.yml`) drives routing and drift detection, and the globs are word-boundary precise: `ProductCard.tsx` does not trigger the production-risk rule, and a utility `.tsx` file outside UI directories does not nag about copy.
+So an ordinary task costs the contract, the domains it actually touched, plus a fixed finalize pass (the drift list and the candidate inbox — a couple of thousand tokens, independent of task size). The same glob map (`.agent/drift-map.yml`) drives routing and drift detection, and the globs are word-boundary precise: `ProductCard.tsx` does not trigger the production-risk rule, and a utility `.tsx` file outside UI directories does not nag about copy.
 
 ## Quickstart
 
@@ -115,7 +115,13 @@ Both scripts **only report and suggest.** The agent then resolves each candidate
 - `rejected` — stale or too specific.
 - `needs-user` — high-risk and unverifiable; ask the human.
 
-The scripts never promote anything themselves. You stay in control of what becomes a rule. Decisions survive re-runs: a candidate marked `checked-unchanged` stays resolved instead of resetting to pending.
+The scripts never promote anything themselves. You stay in control of what becomes a rule. The inbox is built so the lazy paths do not work:
+
+- Candidates are keyed to their evidence (`drift:ui-copy@a1b2c3d`): a decision stays resolved for that evidence, but the same rule firing on **new** files resets to pending instead of inheriting last week's verdict.
+- Pending items are never dropped by regeneration and survive commits — committing work does not clear the inbox, and the Stop gate blocks on committed-but-pending items too.
+- A status flipped without a real decision note reverts to pending on the next scan.
+- Resolved items move to a compact archive section (the audit trail), and a rejected candidate stays suppressed instead of coming back every run.
+- Vendor output (`node_modules/`, `dist/`, …) and the kit's own installation files never produce candidates; the installer auto-resolves day-zero self-noise.
 
 ## What is actually enforced (and what isn't)
 
@@ -123,11 +129,12 @@ Honesty about enforcement matters more than the appearance of it. The exact spli
 
 | Mechanism | Fires on | Blocks? |
 | --- | --- | --- |
-| Bash guard (PreToolUse, both tools) | force push, `git reset --hard`, `rm -rf`, release/deploy/publish/submit, production mutations, destructive SQL | **Yes** — exit 2; bypass `RULES_HOOK_ALLOW_RISK=1` |
-| Finalization gate (Stop, both tools) | non-trivial diff while `.agent/rule-candidates.md` has pending items | **Yes** — lists the pending IDs and the exact re-check command; the agent continues and resolves them (a Stop block means "keep going and fix this", not "halt"); bypass `RULES_HOOK_ALLOW_PENDING=1` |
-| Doc-drift report | at finalize and on demand | No — advisory list of docs to review |
+| Bash guard (PreToolUse, both tools) | force push, `git reset --hard`, `rm -rf` (except ephemeral dirs like `node_modules`/`dist`), release/deploy/publish/submit — including wrapped forms like `npx vercel deploy` and `sh -c "npm publish"` — production mutations, destructive SQL via remote-capable DB CLIs | **Yes** — exit 2; bypass `RULES_HOOK_ALLOW_RISK=1` |
+| Finalization gate (Stop, both tools) | pending items in `.agent/rule-candidates.md` — from the current diff **or committed earlier**; committing is not a bypass | **Yes** — lists the pending IDs and the exact re-check command; the agent continues and resolves them (a Stop block means "keep going and fix this", not "halt"); bypass `RULES_HOOK_ALLOW_PENDING=1` |
+| Doc-drift report | shown inside the gate's block message, and on demand | No — advisory list of docs to review |
+| Stale-map warning | (post-adaptation) a literal drift-map glob matches no repo file — usually a renamed directory | No — one-line warning; the watcher's watcher |
 | Domain router (PostToolUse, Codex) | first edit touching a mapped area | No — one-line pointer |
-| Everything else — the 8 quality loops, source-of-truth order, workflows | prose contract | No — agent judgment, by design |
+| Everything else — the quality loops, source-of-truth order, workflows | prose contract | No — agent judgment, by design |
 
 So: the only hard gates are the narrow bash guard and the candidate inbox. "Don't trust stale docs" and "close every loop" are guidance the agent follows because the contract says so — the kit makes the right moment easy to catch, it does not prove correctness. Both hooks have a loop guard (`stop_hook_active`) so a gate can never spin forever.
 
@@ -139,11 +146,19 @@ The one command above (`agent-install-rules.sh --target <project>`) covers most 
 
 **Brand-new / empty repo.** Works from the first commit. The scan reports `none detected` and adaptation is light: the agent mostly confirms product intent with you and marks unknowns `needs-user`. Greenfield is the best time to install.
 
-**Existing project that already has rules.** Add `--force`; old `AGENTS.md`, `CLAUDE.md`, `.agent/`, etc. are backed up under `.rules-kit/backups/` and read as clues during adaptation:
+**Existing project that already has rules.** Add `--force`; old `AGENTS.md`, `CLAUDE.md`, `.agent/`, etc. are backed up under `.rules-kit/backups/` and read as clues during adaptation. If your old `.claude/settings.json` or `.codex/hooks.json` had custom hooks, permissions, or commands, the installer warns you and the adaptation workflow merges them back from the backup:
 
 ```bash
 /path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --force
 ```
+
+**Updating the kit.** `--upgrade` replaces only kit machinery (scripts, hooks, skills, workflow docs) and never touches adapted content (`product-invariants.md`, `user-journeys.md`, `command-contract.md`, `drift-map.yml`, your active `settings.json`/`hooks.json`). Replaced files are backed up first:
+
+```bash
+/path/to/agent-rules-kit/scripts/agent-install-rules.sh --target /path/to/project --upgrade
+```
+
+**Removing the kit.** Delete the managed paths and restore anything you want from the oldest backup (later backups may contain a previous kit install, not your originals): `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, the three kit scripts under `scripts/` (`check-doc-drift.py`, `bootstrap-project-context.py`, `suggest-rule-updates.py` — other files in `scripts/` are yours), and finally `.rules-kit/`.
 
 **Verify an install:**
 
@@ -154,7 +169,7 @@ The one command above (`agent-install-rules.sh --target <project>`) covers most 
 /path/to/agent-rules-kit/scripts/validate-installed-project.sh /path/to/project --require-adapted --require-candidates-reviewed
 ```
 
-Validation checks **form, not correctness** — that status fields are filled and candidates resolved with real decision notes. It cannot judge whether the agent's facts are right; that is on the agent and you.
+Validation checks **form, not correctness** — that status fields are filled, no template placeholders remain, the drift-map globs stay mirrored into `.claude/rules/*`, and candidates are resolved with real decision notes. It cannot judge whether the agent's facts are right; that is on the agent and you.
 
 ## Daily use, after adaptation
 

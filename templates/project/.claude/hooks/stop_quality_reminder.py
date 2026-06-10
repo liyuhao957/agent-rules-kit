@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Stop hook: candidate-inbox gate plus advisory drift report.
 
-Blocking scope is narrow and honest: the only mechanical gate is that
-non-trivial git changes must not leave `.agent/rule-candidates.md` with
-pending candidates. The doc-drift report is advisory and never blocks.
-Set RULES_HOOK_ALLOW_PENDING=1 to bypass after reviewing the candidate state.
+Blocking scope is narrow and honest: the gate is that work must not finish
+while `.agent/rule-candidates.md` holds pending candidates. That holds for the
+current diff and for pending items that were committed without resolution —
+committing is not a bypass. The doc-drift report is advisory and only shown
+inside a block message. Set RULES_HOOK_ALLOW_PENDING=1 to bypass after
+reviewing the candidate state.
 
 Works for both Claude Code and Codex Stop hooks: on both, exit code 2 with a
 stderr reason tells the agent to continue and resolve the listed candidates.
@@ -27,7 +29,7 @@ IGNORED_CHANGED_FILES = {
     ".agent/project-map.md",
     ".agent/rule-candidates.md",
 }
-IGNORED_CHANGED_PREFIXES = (".agent/work/",)
+IGNORED_CHANGED_PREFIXES = (".agent/work/", ".rules-kit/")
 MAX_LISTED_PENDING = 8
 
 
@@ -58,8 +60,8 @@ def git_files(args: list[str]) -> set[str]:
 
 def changed_files() -> set[str]:
     files: set[str] = set()
-    files.update(git_files(["diff", "--name-only", "--"]))
-    files.update(git_files(["diff", "--cached", "--name-only", "--"]))
+    files.update(git_files(["diff", "--no-renames", "--name-only", "--"]))
+    files.update(git_files(["diff", "--no-renames", "--cached", "--name-only", "--"]))
     files.update(git_files(["ls-files", "--others", "--exclude-standard"]))
     return files
 
@@ -83,7 +85,7 @@ def pending_ids(path: Path) -> list[str]:
     ids: list[str] = []
     current_id: str | None = None
     for raw in text.splitlines():
-        id_match = re.match(r"^###\s+([A-Za-z0-9_.:-]+)", raw.strip())
+        id_match = re.match(r"^###\s+([A-Za-z0-9_.:@+-]+)\s*$", raw.strip())
         if id_match:
             current_id = id_match.group(1)
             continue
@@ -97,58 +99,67 @@ def main() -> int:
     payload = stdin_payload()
     if payload.get("stop_hook_active"):
         # A previous Stop block already asked the agent to act once. Do not
-        # loop the gate; the advisory output below already ran last time.
+        # loop the gate.
         return 0
 
     root = Path.cwd()
     agent_dir = root / ".agent"
-
-    nontrivial = nontrivial_files(changed_files())
-    if not nontrivial:
-        return 0
-
-    if (root / ".agent" / "quality-gates.md").exists():
-        print("Reminder: apply .agent/quality-gates.md before finalizing non-trivial work.", flush=True)
-
-    drift = root / "scripts" / "check-doc-drift.py"
-    if drift.exists():
-        print("Advisory doc-drift report (non-blocking):", flush=True)
-        subprocess.run(["python3", str(drift)], check=False)
-
     if not agent_dir.exists():
-        print("Rules hook warning: .agent is missing; pending candidates were not enforced.")
         return 0
 
     if bypass_enabled():
         print("Rules hook bypass: RULES_HOOK_ALLOW_PENDING is set.")
         return 0
 
+    nontrivial = nontrivial_files(changed_files())
+
     suggest = root / "scripts" / "suggest-rule-updates.py"
-    if not suggest.exists():
-        print("Rules hook warning: scripts/suggest-rule-updates.py is missing; pending candidates were not enforced.")
-        return 0
+    if nontrivial and suggest.exists():
+        # Refresh candidates from the current diff. Pending items from earlier
+        # (including committed ones) are carried forward, never dropped.
+        subprocess.run(["python3", str(suggest), "--quiet"], check=False)
 
-    result = subprocess.run(["python3", str(suggest), "--quiet", "--check"], check=False)
-    if result.returncode == 0:
-        return 0
-
-    candidates_path = root / ".agent" / "rule-candidates.md"
+    candidates_path = agent_dir / "rule-candidates.md"
     ids = pending_ids(candidates_path)
-    print(f"Rules hook blocked finalization: {len(ids)} pending rule candidate(s).", file=sys.stderr)
+    if not ids:
+        return 0
+
+    if nontrivial:
+        print(f"Rules hook blocked finalization: {len(ids)} pending rule candidate(s).", file=sys.stderr)
+    else:
+        print(
+            f"Rules hook blocked finalization: {len(ids)} pending rule candidate(s) remain in "
+            ".agent/rule-candidates.md from earlier (possibly committed) work. Committing does not resolve them.",
+            file=sys.stderr,
+        )
     for cid in ids[:MAX_LISTED_PENDING]:
         print(f"  - {cid}", file=sys.stderr)
     if len(ids) > MAX_LISTED_PENDING:
         print(f"  - ... {len(ids) - MAX_LISTED_PENDING} more", file=sys.stderr)
     print(
         "Resolve before finishing: open .agent/rule-candidates.md and mark each "
-        "candidate promoted, checked-unchanged, rejected, or needs-user based on "
-        "current evidence. Re-check with: python3 scripts/suggest-rule-updates.py --quiet --check",
+        "candidate promoted, checked-unchanged, rejected, or needs-user, with a real "
+        "decision note. Re-check with: python3 scripts/suggest-rule-updates.py --quiet --check",
         file=sys.stderr,
     )
     print(
         "Bypass only after explicit review: RULES_HOOK_ALLOW_PENDING=1",
         file=sys.stderr,
     )
+
+    if nontrivial:
+        if (agent_dir / "quality-gates.md").exists():
+            print("Also apply .agent/quality-gates.md before finalizing.", file=sys.stderr)
+        drift = root / "scripts" / "check-doc-drift.py"
+        if drift.exists():
+            result = subprocess.run(
+                ["python3", str(drift)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False
+            )
+            report = result.stdout.strip()
+            if report:
+                print("Advisory doc-drift report (non-blocking):", file=sys.stderr)
+                print(report, file=sys.stderr)
+
     return 2
 
 

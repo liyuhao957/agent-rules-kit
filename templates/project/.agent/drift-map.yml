@@ -42,6 +42,15 @@ rules:
       - ".agent/rule-health.md"
     reason: "Agent workflow, memory, skill, hook, or tool policy changed."
 
+  - name: docs
+    paths:
+      - "README.md"
+      - "docs/**"
+    docs:
+      - ".agent/user-journeys.md"
+      - ".agent/command-contract.md"
+    reason: "User-facing claims in README/docs (endpoints, commands, paths) go stale silently; check them against current code."
+
   - name: command-contract
     paths:
       - "package.json"

@@ -4,12 +4,26 @@
 The script writes candidates to .agent/rule-candidates.md. It never promotes
 candidates into official rules. Agents must inspect evidence and mark each item
 promoted, checked-unchanged, rejected, or needs-user before finalizing work.
+
+Persistence model:
+- A candidate's identity is `<id>@<evidence-key>`, where the key hashes the
+  evidence set. New evidence for the same rule resets the candidate to pending
+  instead of silently inheriting an old decision.
+- Pending candidates are never dropped by regeneration. If their files leave
+  the diff they are carried forward verbatim until an agent resolves them.
+- Resolved candidates move to a compact archive section that preserves the
+  decision trail, and a resolved status keyed to the same evidence suppresses
+  re-emission, so rejected items do not come back as zombies.
+- Resolving a candidate requires a real decision note: a status flipped to
+  resolved while the notes still say `- pending` reverts to pending.
 """
 
 from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
+import json
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -17,7 +31,6 @@ from pathlib import Path
 
 
 ALLOWED_STATUSES = {"pending", "promoted", "checked-unchanged", "rejected", "needs-user"}
-UNRESOLVED_STATUSES = {"pending"}
 
 # Kit-generated files must not create candidates about themselves.
 GENERATED_FILES = {
@@ -25,7 +38,41 @@ GENERATED_FILES = {
     ".agent/project-map.md",
     ".agent/rule-candidates.md",
 }
-GENERATED_PREFIXES = (".agent/work/",)
+GENERATED_PREFIXES = (".agent/work/", ".rules-kit/")
+
+# Vendor and build output must never produce candidates, even when the repo
+# has no .gitignore yet (mirrors bootstrap-project-context.py SKIP_DIRS).
+VENDOR_SEGMENTS = {
+    "node_modules",
+    "DerivedData",
+    "build",
+    "dist",
+    ".next",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    "coverage",
+    ".turbo",
+    "Pods",
+}
+
+ARCHIVE_BEGIN = "# BEGIN RESOLVED CANDIDATE ARCHIVE"
+ARCHIVE_END = "# END RESOLVED CANDIDATE ARCHIVE"
+MAX_ARCHIVE = 30
+
+# Fallback when .agent/rules-kit.json predates the managedPaths field.
+DEFAULT_MANAGED_PATHS = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".agent",
+    ".agents",
+    ".claude",
+    ".codex",
+    "scripts/check-doc-drift.py",
+    "scripts/bootstrap-project-context.py",
+    "scripts/suggest-rule-updates.py",
+]
 
 
 def run_git(args: list[str]) -> list[str]:
@@ -41,18 +88,26 @@ def run_git(args: list[str]) -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+def is_vendor(file_path: str) -> bool:
+    return any(segment in VENDOR_SEGMENTS for segment in file_path.split("/"))
+
+
 def changed_files(base: str | None) -> list[str]:
     files: set[str] = set()
+    # --no-renames keeps the old path visible when a mapped directory is
+    # renamed away, so the move fires its old drift rule one last time.
     if base:
-        files.update(run_git(["diff", "--name-only", base, "--"]))
+        files.update(run_git(["diff", "--no-renames", "--name-only", base, "--"]))
     else:
-        files.update(run_git(["diff", "--name-only", "--"]))
-        files.update(run_git(["diff", "--cached", "--name-only", "--"]))
+        files.update(run_git(["diff", "--no-renames", "--name-only", "--"]))
+        files.update(run_git(["diff", "--no-renames", "--cached", "--name-only", "--"]))
     files.update(run_git(["ls-files", "--others", "--exclude-standard"]))
     kept = [
         f
         for f in files
-        if f not in GENERATED_FILES and not any(f.startswith(p) for p in GENERATED_PREFIXES)
+        if f not in GENERATED_FILES
+        and not any(f.startswith(p) for p in GENERATED_PREFIXES)
+        and not is_vendor(f)
     ]
     return sorted(kept)
 
@@ -120,61 +175,107 @@ def slugify(value: str) -> str:
     return slug[:80] or "candidate"
 
 
-def existing_statuses(path: Path) -> dict[str, str]:
-    statuses: dict[str, str] = {}
-    text = read_text(path)
-    current_id: str | None = None
-    for raw in text.splitlines():
-        id_match = re.match(r"^###\s+([A-Za-z0-9_.:-]+)", raw.strip())
-        if id_match:
-            current_id = id_match.group(1)
-            continue
-        status_match = re.match(r"^Status:\s*([A-Za-z-]+)\s*$", raw.strip())
-        if current_id and status_match:
-            status = status_match.group(1)
-            if status in ALLOWED_STATUSES:
-                statuses[current_id] = status
-    return statuses
+def evidence_key(evidence: list[str]) -> str:
+    digest = hashlib.sha1("\n".join(sorted(evidence)).encode("utf-8")).hexdigest()
+    return digest[:7]
 
 
-def existing_notes(path: Path) -> dict[str, list[str]]:
-    notes: dict[str, list[str]] = {}
+ID_PATTERN = re.compile(r"^###\s+([A-Za-z0-9_.:@+-]+)\s*$")
+ARCHIVE_LINE = re.compile(r"^-\s+(?P<id>[A-Za-z0-9_.:@+-]+)\s+\|\s+(?P<status>[a-z-]+)\s+\|\s+(?P<date>\S+)\s+\|\s+(?P<note>.*)$")
+
+
+def parse_blocks(path: Path) -> dict[str, dict[str, object]]:
+    """Parse full candidate blocks from the generated section."""
+    blocks: dict[str, dict[str, object]] = {}
     text = read_text(path)
     current_id: str | None = None
-    in_notes = False
-    current_notes: list[str] = []
-    for raw in text.splitlines():
-        id_match = re.match(r"^###\s+([A-Za-z0-9_.:-]+)", raw.strip())
-        if id_match:
-            if current_id is not None:
-                notes[current_id] = current_notes
-            current_id = id_match.group(1)
-            in_notes = False
-            current_notes = []
-            continue
+    raw_lines: list[str] = []
+    in_archive = False
+
+    def flush() -> None:
+        nonlocal current_id, raw_lines
         if current_id is None:
+            return
+        status = "pending"
+        notes: list[str] = []
+        in_notes = False
+        for line in raw_lines:
+            status_match = re.match(r"^Status:\s*([A-Za-z-]+)\s*$", line.strip())
+            if status_match and status_match.group(1) in ALLOWED_STATUSES:
+                status = status_match.group(1)
+            if line.strip() == "Decision notes:":
+                in_notes = True
+                continue
+            if in_notes:
+                if line.strip() == "":
+                    in_notes = False
+                else:
+                    notes.append(line)
+        blocks[current_id] = {"status": status, "notes": notes, "raw": list(raw_lines)}
+        current_id = None
+        raw_lines = []
+
+    for raw in text.splitlines():
+        if raw.strip() == ARCHIVE_BEGIN:
+            in_archive = True
+        elif raw.strip() == ARCHIVE_END:
+            in_archive = False
+        if in_archive:
             continue
-        if raw.strip() == "Decision notes:":
-            in_notes = True
-            current_notes = []
+        id_match = ID_PATTERN.match(raw.strip())
+        if id_match:
+            flush()
+            current_id = id_match.group(1)
+            raw_lines = [raw]
             continue
-        if in_notes and raw.startswith("### "):
-            notes[current_id] = current_notes
-            in_notes = False
-            current_notes = []
-            continue
-        if in_notes:
-            if raw.strip() == "":
-                in_notes = False
+        if current_id is not None:
+            if raw.startswith("# END GENERATED"):
+                flush()
             else:
-                current_notes.append(raw)
-    if current_id is not None:
-        notes[current_id] = current_notes
-    return notes
+                raw_lines.append(raw)
+    flush()
+    return blocks
+
+
+def parse_archive(path: Path) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    in_archive = False
+    for raw in read_text(path).splitlines():
+        if raw.strip() == ARCHIVE_BEGIN:
+            in_archive = True
+            continue
+        if raw.strip() == ARCHIVE_END:
+            break
+        if not in_archive:
+            continue
+        line_match = ARCHIVE_LINE.match(raw.strip())
+        if line_match and line_match.group("status") in ALLOWED_STATUSES:
+            entries.append(
+                {
+                    "id": line_match.group("id"),
+                    "status": line_match.group("status"),
+                    "date": line_match.group("date"),
+                    "note": line_match.group("note").strip(),
+                }
+            )
+    return entries
+
+
+def existing_timestamp(path: Path) -> str | None:
+    for raw in read_text(path).splitlines():
+        ts_match = re.match(r"^Generated:\s*(\S+)\s*$", raw.strip())
+        if ts_match:
+            return ts_match.group(1)
+    return None
+
+
+def meaningful_notes(notes: list[str]) -> bool:
+    joined = " ".join(line.strip().lstrip("-").strip() for line in notes).strip()
+    return len(joined) >= 10 and joined.lower() != "pending"
 
 
 def drift_candidates(files: list[str]) -> list[dict[str, object]]:
-    candidates: list[dict[str, object]] = []
+    raw: list[dict[str, object]] = []
     rules = parse_drift_map(Path(".agent/drift-map.yml"))
     for rule in rules:
         patterns = rule.get("paths", [])
@@ -185,18 +286,48 @@ def drift_candidates(files: list[str]) -> list[dict[str, object]]:
         ]
         if not matched:
             continue
-        name = str(rule.get("name", "unnamed"))
-        docs = [str(doc) for doc in rule.get("docs", [])]  # type: ignore[arg-type]
+        raw.append(
+            {
+                "names": [slugify(str(rule.get("name", "unnamed")))],
+                "evidence": matched[:20],
+                "docs": [str(doc) for doc in rule.get("docs", [])],  # type: ignore[arg-type]
+                "reasons": [str(rule.get("reason", ""))],
+            }
+        )
+
+    # Merge rules that fired on the identical file set: one change, one
+    # candidate, one review — overlapping globs must not double the inbox.
+    merged: dict[tuple[str, ...], dict[str, object]] = {}
+    for item in raw:
+        key = tuple(item["evidence"])  # type: ignore[arg-type]
+        if key in merged:
+            merged[key]["names"].extend(item["names"])  # type: ignore[union-attr]
+            for doc in item["docs"]:  # type: ignore[union-attr]
+                if doc not in merged[key]["docs"]:  # type: ignore[operator]
+                    merged[key]["docs"].append(doc)  # type: ignore[union-attr]
+            merged[key]["reasons"].extend(item["reasons"])  # type: ignore[union-attr]
+        else:
+            merged[key] = item
+
+    candidates: list[dict[str, object]] = []
+    for item in merged.values():
+        names = sorted(set(item["names"]))  # type: ignore[arg-type]
+        evidence = list(item["evidence"])  # type: ignore[arg-type]
+        # Edits that touch only .agent/* docs are rule maintenance, not code
+        # drift; auto-classify so promotions do not spawn an endless second
+        # round of review-the-review.
+        doc_only = all(str(f).startswith(".agent/") for f in evidence)
         candidates.append(
             {
-                "id": f"drift:{slugify(name)}",
-                "title": f"Review rule docs for changed {name} paths",
+                "id": "drift:" + "+".join(names),
+                "title": f"Review rule docs for changed {', '.join(names)} paths",
                 "kind": "drift",
-                "default_status": "pending",
-                "evidence": matched[:20],
-                "docs": docs,
+                "default_status": "checked-unchanged" if doc_only else "pending",
+                "auto_note": "rule-doc maintenance edit; auto-classified by scanner" if doc_only else "",
+                "evidence": evidence,
+                "docs": item["docs"],
                 "action": "Agent should inspect changed files and decide whether to update, keep unchanged, or reject rule changes.",
-                "reason": str(rule.get("reason", "")),
+                "reason": "; ".join(r for r in item["reasons"] if r),  # type: ignore[union-attr]
             }
         )
     return candidates
@@ -241,6 +372,7 @@ def command_candidates() -> list[dict[str, object]]:
                 "title": f"Decide whether `{command}` should be promoted to command inventory",
                 "kind": "command",
                 "default_status": "pending",
+                "auto_note": "",
                 "evidence": [f"{purpose}: {command}"],
                 "docs": [".agent/command-contract.md", ".agent/domains/build-test.md"],
                 "action": "Agent should verify whether this command is durable enough to promote, otherwise mark checked-unchanged or rejected.",
@@ -259,6 +391,10 @@ def backup_candidates() -> list[dict[str, object]]:
         if path.name not in {"AGENTS.md", "CLAUDE.md"}:
             continue
         text = read_text(path, limit=80_000)
+        # A backup identical to the live file is a previous kit install or an
+        # unmodified template — nothing to mine, so no candidate.
+        if text == read_text(Path(path.name), limit=80_000):
+            continue
         headings = [line.strip() for line in text.splitlines() if line.startswith("#")][:20]
         candidates.append(
             {
@@ -266,6 +402,7 @@ def backup_candidates() -> list[dict[str, object]]:
                 "title": f"Review old rule backup `{path.as_posix()}`",
                 "kind": "backup",
                 "default_status": "pending",
+                "auto_note": "",
                 "evidence": headings or ["no markdown headings found"],
                 "docs": [".agent/product-invariants.md", ".agent/user-journeys.md", ".agent/domains/"],
                 "action": "Agent should mine useful durable facts from the backup, reject stale details, and mark high-risk unverified facts as needs-user.",
@@ -344,6 +481,7 @@ def risk_candidates(files: list[str]) -> list[dict[str, object]]:
                 "title": f"Classify high-risk {name} rule impact",
                 "kind": "risk",
                 "default_status": "pending",
+                "auto_note": "",
                 "evidence": matched[:20],
                 "docs": [".agent/tool-policy.md", ".agent/domains/release.md", ".agent/adaptation-review.md"],
                 "action": "Agent should verify from current repo/tool evidence. If not provable, mark needs-user and record the uncertainty without asking unless this task depends on it.",
@@ -358,75 +496,73 @@ def all_candidates(files: list[str]) -> list[dict[str, object]]:
     candidates: list[dict[str, object]] = []
     for group in (drift_candidates(files), command_candidates(), backup_candidates(), risk_candidates(files)):
         for candidate in group:
-            cid = str(candidate["id"])
-            if cid in seen:
+            candidate["key"] = evidence_key([str(e) for e in candidate["evidence"]])  # type: ignore[arg-type]
+            candidate["full_id"] = f"{candidate['id']}@{candidate['key']}"
+            fid = str(candidate["full_id"])
+            if fid in seen:
                 continue
-            seen.add(cid)
+            seen.add(fid)
             candidates.append(candidate)
     return candidates
 
 
-def render(candidates: list[dict[str, object]], statuses: dict[str, str], notes: dict[str, list[str]]) -> str:
+def managed_paths() -> list[str]:
+    meta = Path(".agent/rules-kit.json")
+    try:
+        data = json.loads(meta.read_text(encoding="utf-8"))
+        paths = data.get("managedPaths")
+        if isinstance(paths, list) and paths:
+            return [str(p) for p in paths]
+    except (OSError, json.JSONDecodeError):
+        pass
+    return DEFAULT_MANAGED_PATHS
+
+
+def is_managed(file_path: str, managed: list[str]) -> bool:
+    return any(file_path == m or file_path.startswith(m.rstrip("/") + "/") for m in managed)
+
+
+def render_block(candidate: dict[str, object], status: str, notes: list[str]) -> list[str]:
     lines = [
-        "# Rule Candidates",
-        "",
-        "This file is the automatic-growth inbox for project rules. Scripts generate candidates here; Claude/Codex agents decide and update official `.agent/*` docs when warranted.",
-        "",
-        "Rules must not grow by blindly copying scanner output into durable docs. The agent should inspect current code/config/tool evidence, then choose one status for each candidate:",
-        "",
-        "- `promoted`: verified durable fact was added to the appropriate `.agent/*` doc.",
-        "- `checked-unchanged`: reviewed evidence and existing rules still cover it.",
-        "- `rejected`: not durable, too specific, obvious from code, or not useful as a rule.",
-        "- `needs-user`: high-risk fact cannot be proven from repo/tool evidence. Record the uncertainty; do not ask the user unless the current task depends on it.",
-        "- `pending`: not yet handled. Do not finalize non-trivial work with pending candidates.",
-        "",
-        "Agent rule: decide autonomously whenever current evidence is enough. Do not ask the user to classify ordinary candidates.",
-        "",
-        "# BEGIN GENERATED RULE CANDIDATES",
-        f"Generated: {datetime.now(timezone.utc).isoformat(timespec='seconds')}",
-        "",
+        f"### {candidate['full_id']}",
+        f"Status: {status}",
+        f"Kind: {candidate.get('kind', 'unknown')}",
+        f"Title: {candidate.get('title', '')}",
+        f"Reason: {candidate.get('reason', '')}",
+        "Evidence:",
     ]
-    if not candidates:
-        lines.append("- no current candidates")
-    for candidate in candidates:
-        cid = str(candidate["id"])
-        status = statuses.get(cid, str(candidate.get("default_status", "pending")))
-        if status not in ALLOWED_STATUSES:
-            status = "pending"
-        lines.extend(
-            [
-                f"### {cid}",
-                f"Status: {status}",
-                f"Kind: {candidate.get('kind', 'unknown')}",
-                f"Title: {candidate.get('title', '')}",
-                f"Reason: {candidate.get('reason', '')}",
-                "Evidence:",
-            ]
-        )
-        for item in candidate.get("evidence", []):  # type: ignore[assignment]
-            lines.append(f"- `{item}`")
-        lines.append("Review docs:")
-        for doc in candidate.get("docs", []):  # type: ignore[assignment]
-            lines.append(f"- `{doc}`")
-        lines.extend(
-            [
-                f"Agent action: {candidate.get('action', '')}",
-                "Decision notes:",
-            ]
-        )
-        candidate_notes = notes.get(cid)
-        if candidate_notes and candidate_notes != ["- pending"]:
-            lines.extend(candidate_notes)
-        else:
-            lines.append("- pending")
-        lines.append("")
-    lines.append("# END GENERATED RULE CANDIDATES")
-    return "\n".join(lines).rstrip() + "\n"
+    for item in candidate.get("evidence", []):  # type: ignore[assignment]
+        lines.append(f"- `{item}`")
+    lines.append("Review docs:")
+    for doc in candidate.get("docs", []):  # type: ignore[assignment]
+        lines.append(f"- `{doc}`")
+    lines.extend([f"Agent action: {candidate.get('action', '')}", "Decision notes:"])
+    if notes and meaningful_notes(notes):
+        lines.extend(notes)
+    else:
+        lines.append("- pending")
+    lines.append("")
+    return lines
 
 
-def unresolved_count(path: Path) -> int:
-    text = read_text(path)
-    return len(re.findall(r"^Status:\s*pending\s*$", text, flags=re.MULTILINE))
+HEADER = [
+    "# Rule Candidates",
+    "",
+    "This file is the automatic-growth inbox for project rules. Scripts generate candidates here; Claude/Codex agents decide and update official `.agent/*` docs when warranted.",
+    "",
+    "Rules must not grow by blindly copying scanner output into durable docs. The agent should inspect current code/config/tool evidence, then choose one status for each candidate:",
+    "",
+    "- `promoted`: verified durable fact was added to the appropriate `.agent/*` doc.",
+    "- `checked-unchanged`: reviewed evidence and existing rules still cover it.",
+    "- `rejected`: not durable, too specific, obvious from code, or not useful as a rule.",
+    "- `needs-user`: high-risk fact cannot be proven from repo/tool evidence. Record the uncertainty; do not ask the user unless the current task depends on it.",
+    "- `pending`: not yet handled. Do not finalize non-trivial work with pending candidates.",
+    "",
+    "A decision requires a real note: statuses flipped without decision notes revert to pending on the next scan. Resolved items move to the archive section below and stay resolved.",
+    "",
+    "Agent rule: decide autonomously whenever current evidence is enough. Do not ask the user to classify ordinary candidates.",
+    "",
+]
 
 
 def main() -> int:
@@ -434,19 +570,137 @@ def main() -> int:
     parser.add_argument("--base", help="Optional git base ref to compare against.")
     parser.add_argument("--check", action="store_true", help="Fail if pending candidates remain.")
     parser.add_argument("--quiet", action="store_true", help="Reduce output.")
+    parser.add_argument(
+        "--resolve-kit-install",
+        action="store_true",
+        help="Auto-resolve candidates whose evidence is only kit-installed files (used by the installer).",
+    )
     args = parser.parse_args()
 
     path = Path(".agent/rule-candidates.md")
     files = changed_files(args.base)
-    statuses = existing_statuses(path)
-    notes = existing_notes(path)
+    blocks = parse_blocks(path)
+    archive = parse_archive(path)
     candidates = all_candidates(files)
-    path.write_text(render(candidates, statuses, notes), encoding="utf-8")
 
-    pending = unresolved_count(path)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    archived_status = {entry["id"]: entry for entry in archive}
+    managed = managed_paths() if args.resolve_kit_install else []
+
+    pending_sections: list[list[str]] = []
+    new_archive: list[dict[str, str]] = []
+    generated_ids: set[str] = set()
+
+    for candidate in candidates:
+        fid = str(candidate["full_id"])
+        generated_ids.add(fid)
+        prev = blocks.get(fid) or blocks.get(str(candidate["id"]))  # legacy entries have no @key
+        status = str(candidate.get("default_status", "pending"))
+        notes: list[str] = []
+        auto_note = str(candidate.get("auto_note", ""))
+        if prev:
+            status = str(prev["status"])
+            notes = list(prev["notes"])  # type: ignore[arg-type]
+        elif fid in archived_status:
+            entry = archived_status[fid]
+            status = entry["status"]
+            notes = [f"- {entry['note']}"] if entry["note"] else []
+        if (
+            args.resolve_kit_install
+            and status == "pending"
+            and candidate.get("kind") in {"drift", "risk"}
+            and all(is_managed(str(e), managed) for e in candidate["evidence"])  # type: ignore[arg-type]
+        ):
+            status = "checked-unchanged"
+            notes = ["- kit installation files; auto-resolved by installer"]
+        if status not in ALLOWED_STATUSES:
+            status = "pending"
+        # Anti-rubber-stamp: a resolved status without a real decision note
+        # is not a decision. Auto-classified items carry their own note.
+        if status != "pending" and not meaningful_notes(notes):
+            if auto_note:
+                notes = [f"- {auto_note}"]
+            else:
+                status = "pending"
+        if status == "pending":
+            pending_sections.append(render_block(candidate, status, notes))
+        else:
+            first_note = next((line.strip().lstrip("-").strip() for line in notes if line.strip()), "")
+            new_archive.append({"id": fid, "status": status, "date": today, "note": first_note})
+
+    # Carry forward previously pending candidates whose files left the diff;
+    # they stay in the inbox verbatim until an agent resolves them.
+    carried = 0
+    for fid, block in blocks.items():
+        if fid in generated_ids:
+            continue
+        if block["status"] == "pending":
+            pending_sections.append(list(block["raw"]) + [""])
+            carried += 1
+        else:
+            notes = list(block["notes"])  # type: ignore[arg-type]
+            if not meaningful_notes(notes):
+                # Resolved without a note and no longer reproducible from the
+                # diff: keep it in the inbox rather than blessing the flip.
+                pending_sections.append(
+                    [re.sub(r"^Status:.*$", "Status: pending", line) for line in block["raw"]] + [""]
+                )
+                carried += 1
+                continue
+            first_note = next((line.strip().lstrip("-").strip() for line in notes if line.strip()), "")
+            new_archive.append({"id": fid, "status": str(block["status"]), "date": today, "note": first_note})
+
+    # Merge archives: newly resolved first, then prior entries, dedupe by id.
+    seen_archive: set[str] = set()
+    merged_archive: list[dict[str, str]] = []
+    for entry in new_archive + archive:
+        if entry["id"] in seen_archive:
+            continue
+        seen_archive.add(entry["id"])
+        merged_archive.append(entry)
+    merged_archive = merged_archive[:MAX_ARCHIVE]
+
+    pending = len(pending_sections)
+
+    body: list[str] = []
+    body.append("# BEGIN GENERATED RULE CANDIDATES")
+    body.append("Generated: {timestamp}")
+    body.append("")
+    if not pending_sections:
+        body.append("- no current candidates")
+        body.append("")
+    for section in pending_sections:
+        body.extend(section)
+    body.append("# END GENERATED RULE CANDIDATES")
+    body.append("")
+    body.append(ARCHIVE_BEGIN)
+    if not merged_archive:
+        body.append("- no resolved candidates yet")
+    for entry in merged_archive:
+        body.append(f"- {entry['id']} | {entry['status']} | {entry['date']} | {entry['note']}")
+    body.append(ARCHIVE_END)
+
+    content_template = "\n".join(HEADER + body).rstrip() + "\n"
+
+    # Only touch the file when the content (minus the timestamp) actually
+    # changed: checks and Stop-hook runs must not churn a tracked file.
+    old_text = read_text(path)
+    old_ts = existing_timestamp(path)
+    if old_ts and content_template.replace("{timestamp}", old_ts) == old_text:
+        final_text = old_text
+    else:
+        final_text = content_template.replace(
+            "{timestamp}", datetime.now(timezone.utc).isoformat(timespec="seconds")
+        )
+        path.write_text(final_text, encoding="utf-8")
+
     if not args.quiet:
-        print(f"Rule candidates: {len(candidates)} generated, {pending} pending.")
-        print("Review .agent/rule-candidates.md and mark each candidate promoted, checked-unchanged, rejected, or needs-user.")
+        print(
+            f"Rule candidates: {len(candidates)} generated, {carried} carried forward, "
+            f"{pending} pending, {len(merged_archive)} archived."
+        )
+        if pending:
+            print("Review .agent/rule-candidates.md and mark each candidate promoted, checked-unchanged, rejected, or needs-user.")
     if args.check and pending:
         return 1
     return 0

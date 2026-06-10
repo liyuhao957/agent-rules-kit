@@ -35,23 +35,80 @@ GENERATED_FILES = {
     ".agent/project-map.md",
     ".agent/rule-candidates.md",
 }
-GENERATED_PREFIXES = (".agent/work/",)
+GENERATED_PREFIXES = (".agent/work/", ".rules-kit/")
+
+# Vendor and build output must never produce drift signals, even when the
+# repo has no .gitignore yet (mirrors bootstrap-project-context.py SKIP_DIRS).
+VENDOR_SEGMENTS = {
+    "node_modules",
+    "DerivedData",
+    "build",
+    "dist",
+    ".next",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".pytest_cache",
+    "coverage",
+    ".turbo",
+    "Pods",
+}
+
+
+def is_vendor(file_path: str) -> bool:
+    return any(segment in VENDOR_SEGMENTS for segment in file_path.split("/"))
 
 
 def changed_files(base: str | None) -> list[str]:
     files: set[str] = set()
+    # --no-renames keeps the old path visible when a mapped directory is
+    # renamed away, so the move fires its old drift rule one last time.
     if base:
-        files.update(run_git(["diff", "--name-only", base, "--"]))
+        files.update(run_git(["diff", "--no-renames", "--name-only", base, "--"]))
     else:
-        files.update(run_git(["diff", "--name-only", "--"]))
-        files.update(run_git(["diff", "--cached", "--name-only", "--"]))
+        files.update(run_git(["diff", "--no-renames", "--name-only", "--"]))
+        files.update(run_git(["diff", "--no-renames", "--cached", "--name-only", "--"]))
     files.update(run_git(["ls-files", "--others", "--exclude-standard"]))
     kept = [
         f
         for f in files
-        if f not in GENERATED_FILES and not any(f.startswith(p) for p in GENERATED_PREFIXES)
+        if f not in GENERATED_FILES
+        and not any(f.startswith(p) for p in GENERATED_PREFIXES)
+        and not is_vendor(f)
     ]
     return sorted(kept)
+
+
+def map_is_adapted() -> bool:
+    try:
+        text = Path(".agent/adaptation-review.md").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return bool(re.search(r"^Status:\s*adapted\s*$", text, flags=re.MULTILINE))
+
+
+def stale_globs(rules: list[dict[str, object]]) -> list[tuple[str, str]]:
+    """Report concrete drift-map globs that no longer match any repo file.
+
+    Only runs after adaptation (before that the map is a generic template and
+    unmatched globs are expected), and only checks patterns anchored to a
+    literal directory (e.g. `src/components/**`): a dead literal path means
+    the map went stale — typically after a rename — and routing is silently
+    blind there. The watcher needs a watcher.
+    """
+    if not map_is_adapted():
+        return []
+    repo_files = run_git(["ls-files"]) + run_git(["ls-files", "--others", "--exclude-standard"])
+    stale: list[tuple[str, str]] = []
+    for rule in rules:
+        for pattern in rule.get("paths", []):  # type: ignore[union-attr]
+            pattern = str(pattern)
+            first_segment = pattern.split("/", 1)[0]
+            if "/" not in pattern or any(ch in first_segment for ch in "*?["):
+                continue
+            if not any(matches(pattern, f) for f in repo_files):
+                stale.append((str(rule.get("name", "unnamed")), pattern))
+    return stale
 
 
 def parse_drift_map(path: Path) -> list[dict[str, object]]:
@@ -122,6 +179,13 @@ def main() -> int:
 
     files = changed_files(args.base)
     rules = parse_drift_map(Path(args.map))
+
+    if not args.quiet:
+        for rule_name, pattern in stale_globs(rules):
+            print(
+                f"Drift-map warning: [{rule_name}] glob `{pattern}` matches no tracked file — "
+                "the map may be stale (renamed directory?). Update .agent/drift-map.yml and mirror .claude/rules/*.md."
+            )
 
     if not files:
         if not args.quiet:

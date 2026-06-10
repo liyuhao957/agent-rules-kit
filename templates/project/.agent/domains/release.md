@@ -8,21 +8,15 @@ Publishing, deploying, submitting to stores, changing production config, signing
 
 - Current version/build/release identifiers.
 - Authentication and permission status.
-- Local dirty state and intended scope.
-- Current remote state with authenticated tools.
-- Required tests/builds/checks.
-- `.agent/command-contract.md` for current build/test/release verification commands.
+- Local dirty state and intended scope — do not sweep unrelated local changes into a release.
+- Current remote state with authenticated tools; a runbook, skill, or memory is not proof of live state.
+- Required tests/builds/checks from `.agent/command-contract.md`.
 
 ## Do
 
 - Confirm scope when ambiguity affects users, money, data, or irreversible state.
-- Verify both before and after external changes.
-- Keep exact evidence for final summary.
-
-## Do Not
-
-- Treat a runbook, skill, or memory as proof of live state.
-- Sweep unrelated local changes into a release.
+- Verify remote state both before and after external changes, with the same class of real tool.
+- Keep exact evidence for the final summary.
 
 ## Done Means
 

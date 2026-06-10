@@ -7,7 +7,7 @@ Routing map for the shared project protocol. Load only what the current task nee
 1. **Start**: if `.agent/adaptation-review.md` says `Status: pending`, run `.agent/workflows/adapt-rules.md` before ordinary work.
 2. **Route**: pick the workflow for the task type and the domain docs for the touched areas (tables below).
 3. **Implement**: smallest change that closes the user-visible loop; verify doc claims against current code first.
-4. **Finalize**: apply `.agent/quality-gates.md`; run `python3 scripts/check-doc-drift.py` (advisory doc list) and `python3 scripts/suggest-rule-updates.py`; resolve every pending item in `.agent/rule-candidates.md`.
+4. **Finalize**: follow "At Finalize" below — the canonical protocol.
 5. **Hand off**: write `.agent/work/current.md` (shape: `.agent/handoff-template.md`) only if work remains or another agent continues.
 
 ## By Task Type
@@ -32,16 +32,27 @@ Claude Code auto-loads these pointers via `.claude/rules/` when matching files a
 | Localization, strings | `.agent/domains/localization.md` |
 | Performance, benchmarks | `.agent/domains/performance.md` |
 | Release, signing, deploy, store | `.agent/domains/release.md` |
+| README, user-facing docs | `.agent/user-journeys.md` + `.agent/command-contract.md` |
 
 After editing, `python3 scripts/check-doc-drift.py` lists the mapped docs for your actual diff — prefer that mechanical list over loading everything.
 
 ## At Finalize
 
-- Quality loops: `.agent/quality-gates.md`
-- Evidence choices: `.agent/verification-map.md`
-- Verified commands: `.agent/command-contract.md`
-- Drift policy and map: `.agent/doc-drift.md`, `.agent/drift-map.yml`
-- Candidate inbox (must be drained): `.agent/rule-candidates.md`
+Canonical finalize protocol. Other docs point here; do not restate it elsewhere.
+
+1. Apply `.agent/quality-gates.md` to the affected loops; choose evidence with `.agent/verification-map.md` and commands from `.agent/command-contract.md`.
+2. Run `python3 scripts/check-doc-drift.py` — advisory list of shared docs mapped to your diff (policy: `.agent/doc-drift.md`).
+3. Run `python3 scripts/suggest-rule-updates.py` — regenerates the candidate inbox `.agent/rule-candidates.md`.
+4. Resolve every pending candidate with one of four statuses plus a real decision note: `promoted` (fact written into the right `.agent/*` doc), `checked-unchanged`, `rejected`, or `needs-user` (high-risk, unprovable from repo/tool evidence).
+
+Inbox semantics that matter:
+
+- A status flipped without a real decision note reverts to pending on the next scan.
+- Resolved candidates move to the compact archive section of `.agent/rule-candidates.md` (the audit trail); rejected items stay suppressed.
+- Pending candidates carry forward across regeneration, commits, and handoffs. Committing does not clear them; the Stop gate blocks on committed-but-pending items too.
+- New evidence for the same rule (`<id>@<evidence-key>`) resets the candidate to pending — no status inheritance.
+
+Full engine mechanics: `.agent/doc-drift.md`.
 
 ## Reference (load when the topic comes up)
 
