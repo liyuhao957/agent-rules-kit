@@ -33,3 +33,4 @@ Use explicit skill invocation or manually follow the skill for:
 - Do not duplicate long policy text separately for Claude and Codex.
 - If a relevant skill fails to trigger automatically, invoke it manually or follow its referenced workflow.
 - Skills should call shared scripts such as `python3 scripts/check-doc-drift.py` when a mechanical signal is more reliable than model judgment.
+- Skills are adapters, not the rule source. Durable project rules stay in repository-visible `AGENTS.md` and `.agent/*` files so Claude, Codex, and humans can diff and review the same contract.

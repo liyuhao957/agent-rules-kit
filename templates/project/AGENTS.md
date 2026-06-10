@@ -47,6 +47,7 @@ Done does not mean "code changed." Done means the affected loops are closed or e
 
 - Skills are workflow loaders, not guarantees. Use automatic invocation when it triggers, but explicitly invoke or follow the relevant skill for high-risk work.
 - MCP tools, CLIs, browser automation, device tools, database tools, and remote APIs are evidence sources. Use them when the task depends on live or private state.
+- Durable rules stay in repository-visible `AGENTS.md` and `.agent/*`; skills and MCP/tool integrations should load or wrap those rules, not replace them.
 - If a required tool is unavailable, say so. Do not infer live state from docs, memory, or another agent's summary.
 - Use `python3 scripts/check-doc-drift.py` before finalizing non-trivial changes to discover which shared docs may need review.
 - Use `python3 scripts/suggest-rule-updates.py` before finalizing non-trivial changes; decide candidates autonomously and update `.agent/*` when current evidence supports it.

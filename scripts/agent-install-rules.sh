@@ -14,7 +14,7 @@ Agent-facing entrypoint:
   4. Prints the required agent adaptation workflow.
 
 This command does not complete project adaptation by itself. A Claude/Codex
-agent must inspect current code/config and update .agent/* before strict
+agent must inspect current code/config and update .agent/* before adapted
 validation can pass.
 EOF
 }

@@ -1,6 +1,6 @@
 # Claude Code Local Config Templates
 
-`settings.example.json` is an example only. Review it, then copy it to `.claude/settings.json` if you want Claude Code hook reminders.
+Rules installs `.claude/settings.json` for you. `settings.example.json` is kept as a reference copy.
 
 Suggested project-local layout:
 
@@ -18,4 +18,6 @@ Claude Code also reads:
 
 Keep shared project truth in `.agent/`, not only in Claude memory.
 
-The included Stop hook also runs `python3 scripts/check-doc-drift.py` when present.
+By default, hooks block only narrow high-risk cases and otherwise stay quiet: force pushes, `git reset --hard`, `rm -rf`, release/deploy/publish/submit actions, production mutations, and finalizing non-trivial changes while `.agent/rule-candidates.md` still has pending candidates.
+
+Use `RULES_HOOK_ALLOW_RISK=1` or `RULES_HOOK_ALLOW_PENDING=1` only for an intentional operation after explicit review.

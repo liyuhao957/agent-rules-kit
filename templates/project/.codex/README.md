@@ -1,6 +1,6 @@
 # Codex Local Config Templates
 
-`hooks.example.json` is an example only. Review it, then copy it to `.codex/hooks.json` if you want hook reminders.
+Rules installs `.codex/hooks.json` for you. `hooks.example.json` is kept as a reference copy.
 
 Suggested project-local layout:
 
@@ -12,4 +12,6 @@ Suggested project-local layout:
 
 Hooks are mechanical reminders and guards. They do not replace `.agent/quality-gates.md`, tools, tests, or careful review.
 
-The included Stop hook also runs `python3 scripts/check-doc-drift.py` when present.
+By default, hooks block only narrow high-risk cases and otherwise stay quiet: force pushes, `git reset --hard`, `rm -rf`, release/deploy/publish/submit actions, production mutations, and finalizing non-trivial changes while `.agent/rule-candidates.md` still has pending candidates.
+
+Use `RULES_HOOK_ALLOW_RISK=1` or `RULES_HOOK_ALLOW_PENDING=1` only for an intentional operation after explicit review.

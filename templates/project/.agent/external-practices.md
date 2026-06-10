@@ -16,7 +16,7 @@ This file records outside practices that shaped this rules kit. It is not a link
 
 - Huge global rule files: they are easy to ignore and can crowd out task context.
 - Fully automatic doc rewriting: too likely to create noisy or wrong docs; this kit detects candidates and asks agents to decide.
-- Hard blocking hooks by default: project commands differ too much; templates start as reminders and can be tightened per project.
+- Broad blocking hooks by default: project commands differ too much; installed hooks block only narrow high-risk cases and otherwise rely on agent judgment plus verification.
 - Tool-specific private memory as project truth: Claude and Codex do not share private memory.
 
 ## Add More
@@ -28,4 +28,3 @@ When adopting a new outside practice, record:
 - What changed in this kit:
 - Why it fits:
 - What was deliberately not copied:
-

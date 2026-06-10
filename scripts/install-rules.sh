@@ -145,9 +145,12 @@ fi
 
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] copy template files from $template_dir to $target"
+  echo "[dry-run] write active hook configs from .codex/hooks.example.json and .claude/settings.example.json"
 else
   mkdir -p "$target"
   cp -R "$template_dir"/. "$target"/
+  cp "$target/.codex/hooks.example.json" "$target/.codex/hooks.json"
+  cp "$target/.claude/settings.example.json" "$target/.claude/settings.json"
   find "$target" -path '*/__pycache__*' -prune -exec rm -rf {} + 2>/dev/null || true
   chmod +x "$target/scripts/check-doc-drift.py" \
     "$target/scripts/bootstrap-project-context.py" \

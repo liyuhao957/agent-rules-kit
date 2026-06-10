@@ -490,7 +490,7 @@ def write_report(root: Path, project: dict[str, object], commands: list[tuple[st
             "- Fill `.agent/user-journeys.md` with the project's core user paths.",
             "- Review `.agent/command-contract.md` and replace invalid command candidates.",
             "- Review generated candidates in `.agent/drift-map.yml` for project-specific path ownership and noise.",
-            "- Decide whether to enable hook examples by copying `.codex/hooks.example.json` to `.codex/hooks.json` and/or `.claude/settings.example.json` to `.claude/settings.json`.",
+            "- Review installed hook configs in `.codex/hooks.json` and `.claude/settings.json` if this project needs local customization.",
             "- Do not treat device, store, production, remote, pricing, or credential state as verified from this bootstrap.",
         ]
     )

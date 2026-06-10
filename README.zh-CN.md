@@ -104,12 +104,7 @@ python3 scripts/suggest-rule-updates.py  # 把候选写进 .agent/rule-candidate
 
 上面那条命令(`agent-install-rules.sh --target <project>`)已覆盖大多数情况。几个细节:
 
-**只用一个智能体(Claude 或 Codex)。** 照常安装即可——没有「只装某一个」的参数,安装器总会把两边的文件都写上。你只用自己那套就行;另一套是惰性的(永远不会被执行),而且应当留着别删,因为校验会要求两套都在。可选地,只给你自己的智能体接钩子:
-
-```bash
-cp .claude/settings.example.json .claude/settings.json   # Claude
-cp .codex/hooks.example.json     .codex/hooks.json       # Codex
-```
+**只用一个智能体(Claude 或 Codex)。** 照常安装即可——没有「只装某一个」的参数,安装器总会把两边的文件和钩子配置都写上。你只用自己那套就行;另一套只有对应工具运行时才会生效,而且应当留着别删,因为校验会要求两套都在。
 
 只用 Claude 还会多出 `.claude/agents/` 下的子智能体(reviewer、qa、docs-drift-checker);只用 Codex 则保留除此之外的一切。
 
@@ -145,7 +140,8 @@ cp .codex/hooks.example.json     .codex/hooks.json       # Codex
 - 事实来源的优先级:你当前的指令 → 当前的代码/配置/测试/工具/线上状态 → 共享的 `.agent/` 文档 → README、issue、旧交接和记忆。
 - Claude 或 Codex 的私有记忆是个人提示,绝不等于共享的项目事实。长期有效的事实存在仓库里,让每个智能体都看得到。
 - 文档负责把智能体导向正确的检查;真正能证明事实的,是当前代码和真实的工具输出。
-- 技能、钩子、漂移脚本只是让该检查的时刻更容易被抓住——它们替代不了判断。
+- 技能是很薄的工作流加载器,不是规则来源。MCP/工具是证据通道,也不是规则来源。长期规则仍然放在仓库可见的 Markdown 里。
+- 钩子和漂移脚本让该检查的时刻更容易被抓住。安装好的钩子会对高风险动作增加少量机械阻塞,但它们仍然不能证明事情是对的。
 
 ## 参考
 
@@ -194,15 +190,15 @@ scripts/*.py                  bootstrap-project-context、check-doc-drift、sugg
 </details>
 
 <details>
-<summary><strong>启用钩子(可选)</strong></summary>
+<summary><strong>钩子</strong></summary>
 
-钩子以示例形式提供,让你有意识地选择开启。它们是提醒和护栏——替代不了校验。先审阅其中的命令,再:
+Rules 默认会安装 Claude Code 和 Codex 的钩子配置:
 
-```bash
-cp .codex/hooks.example.json     .codex/hooks.json        # Codex
-cp .claude/settings.example.json .claude/settings.json    # Claude Code
-```
+- `.codex/hooks.json`
+- `.claude/settings.json`
 
-其中的 Stop 钩子在存在时还会运行 `python3 scripts/check-doc-drift.py`。
+示例文件会继续留在仓库里当参考。钩子是提醒和护栏——替代不了校验。
+
+默认只拦少数高风险场景:强推、`git reset --hard`、`rm -rf`、release/deploy/publish/submit 动作、生产环境变更,以及有非琐碎改动但 `.agent/rule-candidates.md` 仍有 pending 候选时的收尾。只有在明确复查后,才用 `RULES_HOOK_ALLOW_RISK=1` 或 `RULES_HOOK_ALLOW_PENDING=1` 绕过。
 
 </details>

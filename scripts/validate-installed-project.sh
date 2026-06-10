@@ -56,6 +56,16 @@ if ! grep -Fq "@AGENTS.md" "$target/CLAUDE.md"; then
   exit 1
 fi
 
+if [[ ! -f "$target/.codex/hooks.json" ]]; then
+  echo "FAIL: missing .codex/hooks.json. Rules installs active Codex hooks by default." >&2
+  exit 1
+fi
+
+if [[ ! -f "$target/.claude/settings.json" ]]; then
+  echo "FAIL: missing .claude/settings.json. Rules installs active Claude Code hooks by default." >&2
+  exit 1
+fi
+
 if [[ -x "$target/scripts/check-doc-drift.py" ]]; then
   (cd "$target" && python3 scripts/check-doc-drift.py >/dev/null)
 else

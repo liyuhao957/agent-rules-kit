@@ -104,12 +104,7 @@ The scripts never promote anything themselves. You stay in control of what becom
 
 The one command above (`agent-install-rules.sh --target <project>`) covers most cases. A few specifics:
 
-**One agent only (Claude *or* Codex).** Install the normal way — there is no per-agent flag, and the installer always writes both agents' files. Just use yours; the other set is inert (it is never executed), and you should leave it in place because validation expects both to exist. Optionally wire up only your agent's hooks:
-
-```bash
-cp .claude/settings.example.json .claude/settings.json   # Claude
-cp .codex/hooks.example.json     .codex/hooks.json       # Codex
-```
+**One agent only (Claude *or* Codex).** Install the normal way — there is no per-agent flag, and the installer always writes both agents' files and both hook configs. Just use yours; the other set is inert unless that tool is running, and you should leave it in place because validation expects both to exist.
 
 Claude-only additionally gets subagents under `.claude/agents/` (reviewer, qa, docs-drift-checker); Codex-only keeps everything except those.
 
@@ -145,7 +140,8 @@ One idea underneath all of it: **the agent is the judge; the kit is the evidence
 - Source-of-truth order: your current instruction → current code/config/tests/tools/live state → shared `.agent/` docs → READMEs, issues, old handoffs and memories.
 - Private Claude or Codex memory is a personal hint, never shared project truth. Durable facts live in the repo where every agent can see them.
 - Docs point the agent at the right checks; current code and real tool output are what actually prove a fact.
-- Skills, hooks, and drift scripts make the right moment easier to catch — they do not replace judgment.
+- Skills are thin workflow loaders, not the rule source. MCP/tools are evidence channels, not the rule source. Durable rules stay in repo-visible Markdown.
+- Hooks and drift scripts make the right moment easier to catch. Installed hooks add narrow mechanical blocking for high-risk actions, but they still do not prove correctness.
 
 ## Reference
 
@@ -194,15 +190,15 @@ Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.codex/
 </details>
 
 <details>
-<summary><strong>Enabling hooks (optional)</strong></summary>
+<summary><strong>Hooks</strong></summary>
 
-Hooks ship as examples so you opt in deliberately. They are reminders and guards — they do not replace validation. Review the commands first, then:
+Rules installs Claude Code and Codex hook configs by default:
 
-```bash
-cp .codex/hooks.example.json     .codex/hooks.json        # Codex
-cp .claude/settings.example.json .claude/settings.json    # Claude Code
-```
+- `.codex/hooks.json`
+- `.claude/settings.json`
 
-The Stop hook also runs `python3 scripts/check-doc-drift.py` when present.
+The example files stay in the repo as reference copies. Hooks are reminders and guards — they do not replace validation.
+
+By default, hooks block only narrow high-risk cases: force pushes, `git reset --hard`, `rm -rf`, release/deploy/publish/submit actions, production mutations, and finalizing non-trivial changes while `.agent/rule-candidates.md` still has pending candidates. Use `RULES_HOOK_ALLOW_RISK=1` or `RULES_HOOK_ALLOW_PENDING=1` only for an intentional operation after explicit review.
 
 </details>
