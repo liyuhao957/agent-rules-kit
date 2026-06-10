@@ -68,8 +68,9 @@ if [[ "$upgrade" -eq 1 ]]; then
 
 Upgrade follow-up:
   cd "$target"
-  1. If the installer printed a NOTICE about example configs, diff the refreshed .claude/settings.example.json / .codex/hooks.example.json against the active .claude/settings.json / .codex/hooks.json and merge changes manually.
-  2. Re-run:
+  1. If the installer printed a NOTICE about a validation gap, merge the new template content into the adapted files (AGENTS.md, CLAUDE.md, .agent/*): compare each file validation names with its counterpart under the kit's templates/project/ and fold in the missing sections, keeping the project-specific facts. Seeded .claude/rules/*.md pointers must mirror .agent/drift-map.yml globs — add a drift-map rule when a seeded pointer has none.
+  2. If the installer printed a NOTICE about example configs, diff the refreshed .claude/settings.example.json / .codex/hooks.example.json against the active .claude/settings.json / .codex/hooks.json and merge changes manually.
+  3. Re-run until clean:
      bash "$script_dir/validate-installed-project.sh" "$target" --require-adapted --require-candidates-reviewed
      python3 scripts/check-doc-drift.py
 EOF

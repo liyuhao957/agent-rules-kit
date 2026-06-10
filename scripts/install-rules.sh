@@ -200,9 +200,21 @@ if [[ "$upgrade" -eq 1 ]]; then
     upgrade_paths+=(".agent/workflows/$(basename "$file")")
   done
 
+  # Kit files that older versions shipped under names this version no longer
+  # uses. Without cleanup the old and new variants coexist after an upgrade
+  # (e.g. skills/review next to skills/review-changes). Kit machinery only —
+  # never list adapted content here.
+  obsolete_paths=(
+    ".claude/skills/review"       # renamed to review-changes
+    ".claude/skills/drift-check"  # removed; doc-drift covers it
+  )
+
   if [[ "$dry_run" -eq 1 ]]; then
     echo "[dry-run] back up replaced paths to $backup_dir"
     printf '[dry-run] replace %s\n' "${upgrade_paths[@]}"
+    for path in "${obsolete_paths[@]}"; do
+      [[ -e "$target/$path" ]] && echo "[dry-run] remove obsolete kit path $path (backed up first)"
+    done
     echo "[dry-run] regenerate .agents/skills from canonical .claude/skills"
     echo "[dry-run] update $metadata (new rulesKitVersion, upgradedAt, managedPaths; installedAt preserved)"
   else
@@ -216,6 +228,14 @@ if [[ "$upgrade" -eq 1 ]]; then
       fi
       mkdir -p "$(dirname "$target/$path")"
       cp -R "$template_dir/$path" "$target/$path"
+    done
+    for path in "${obsolete_paths[@]}"; do
+      if [[ -e "$target/$path" ]]; then
+        mkdir -p "$(dirname "$backup_dir/$path")"
+        cp -R "$target/$path" "$backup_dir/$path"
+        rm -rf "$target/$path"
+        echo "Removed obsolete kit path $path (backup: $backup_dir/$path)"
+      fi
     done
     # .claude/skills is the canonical tree; regenerate the Codex tree exactly
     # like a fresh install so the two cannot drift apart.
@@ -233,6 +253,83 @@ if [[ "$upgrade" -eq 1 ]]; then
       "$target/scripts/suggest-rule-updates.py" \
       "$target/.codex/hooks/"*.py \
       "$target/.claude/hooks/"*.py 2>/dev/null || true
+  fi
+
+  # Structure that newer kit versions require but older installs predate.
+  # Only seeded when missing; existing files are never touched. Pointer globs
+  # are mirrored from the project's own drift-map (template globs as fallback)
+  # so on-demand loading works without waiting for re-adaptation.
+  if [[ "$dry_run" -eq 1 ]]; then
+    for file in "$template_dir/.claude/rules/"*.md; do
+      rel=".claude/rules/$(basename "$file")"
+      [[ -e "$target/$rel" ]] || echo "[dry-run] seed $rel (globs mirrored from .agent/drift-map.yml when available)"
+    done
+    [[ -f "$target/.claude/settings.json" ]] || echo "[dry-run] seed .claude/settings.json from .claude/settings.example.json"
+    [[ -f "$target/.codex/hooks.json" ]] || echo "[dry-run] seed .codex/hooks.json from .codex/hooks.example.json"
+  else
+    seeded=()
+    for file in "$template_dir/.claude/rules/"*.md; do
+      rel=".claude/rules/$(basename "$file")"
+      if [[ ! -e "$target/$rel" ]]; then
+        mkdir -p "$target/.claude/rules"
+        python3 - "$file" "$target/$rel" "$target/.agent/drift-map.yml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+template = Path(sys.argv[1]).read_text(encoding="utf-8")
+out = Path(sys.argv[2])
+drift_path = Path(sys.argv[3])
+name = out.stem
+
+match = re.match(r"^---\n(.*?)\n---\n(.*)$", template, flags=re.DOTALL)
+frontmatter, body = (match.group(1), match.group(2)) if match else ("paths:", template)
+
+# Same minimal parser as scripts/check-doc-drift.py; pull the globs of the
+# drift-map rule with the same name as this pointer file.
+globs = []
+if drift_path.is_file():
+    current = None
+    active = None
+    for raw in drift_path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        if re.match(r"^\s*-\s+name:\s*", line):
+            current = line.split("name:", 1)[1].strip().strip('"')
+            active = None
+            continue
+        if current is None:
+            continue
+        stripped = line.strip()
+        if stripped in {"paths:", "docs:"}:
+            active = stripped[:-1]
+            continue
+        if stripped.startswith("reason:"):
+            active = None
+            continue
+        if stripped.startswith("- ") and active == "paths" and current == name:
+            globs.append(stripped[2:].strip().strip('"'))
+
+if globs:
+    frontmatter = "paths:\n" + "\n".join(f'  - "{glob}"' for glob in globs)
+out.write_text(f"---\n{frontmatter}\n---\n{body}", encoding="utf-8")
+PY
+        seeded+=("$rel")
+      fi
+    done
+    if [[ ! -f "$target/.claude/settings.json" && -f "$target/.claude/settings.example.json" ]]; then
+      cp "$target/.claude/settings.example.json" "$target/.claude/settings.json"
+      seeded+=(".claude/settings.json")
+    fi
+    if [[ ! -f "$target/.codex/hooks.json" && -f "$target/.codex/hooks.example.json" ]]; then
+      cp "$target/.codex/hooks.example.json" "$target/.codex/hooks.json"
+      seeded+=(".codex/hooks.json")
+    fi
+    if [[ ${#seeded[@]} -gt 0 ]]; then
+      echo "Seeded structure new to this kit version (missing in the old install):"
+      printf '  - %s\n' "${seeded[@]}"
+    fi
   fi
 
   if [[ "$dry_run" -eq 1 ]]; then
@@ -271,11 +368,24 @@ EOF
         echo "  diff \"$target/$example_cfg\" \"$target/$active_cfg\""
       fi
     done
-    bash "$rules_root/scripts/validate-installed-project.sh" "$target"
+    # Validation gaps in adapted files (AGENTS.md, CLAUDE.md, .agent/*) are
+    # expected when upgrading across versions that added contract content:
+    # the upgrade never rewrites adapted files, so an agent must merge the
+    # new template content. That is follow-up adaptation work, not a failed
+    # upgrade — report it as such instead of dying on the first FAIL.
+    if ! bash "$rules_root/scripts/validate-installed-project.sh" "$target"; then
+      echo ""
+      echo "NOTICE: kit machinery is upgraded, but validation found a gap (FAIL above)."
+      echo "  Gaps in adapted files mean they predate this kit version. Have a Claude/Codex"
+      echo "  agent merge the new content from $template_dir"
+      echo "  into the adapted files (validation names each missing piece), then re-run:"
+      echo "  bash $rules_root/scripts/validate-installed-project.sh $target --require-adapted --require-candidates-reviewed"
+      echo "  If a FAIL is not about adapted content, treat it as a real installation problem."
+    fi
   fi
 
   echo "Relay Rules tooling upgraded to $version."
-  echo "Agent-adapted content (.agent docs, drift-map, domains, AGENTS.md, CLAUDE.md, .claude/rules/, active hook configs) was not modified."
+  echo "Existing agent-adapted content (.agent docs, drift-map, domains, AGENTS.md, CLAUDE.md, .claude/rules/, active hook configs) was not modified; missing structure was only seeded, never overwritten."
   echo "Backup of replaced kit files: $backup_dir"
   exit 0
 fi
