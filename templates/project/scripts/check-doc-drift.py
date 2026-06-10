@@ -29,6 +29,15 @@ def run_git(args: list[str]) -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+# Kit-generated files must not create drift signals about themselves.
+GENERATED_FILES = {
+    ".agent/bootstrap-report.md",
+    ".agent/project-map.md",
+    ".agent/rule-candidates.md",
+}
+GENERATED_PREFIXES = (".agent/work/",)
+
+
 def changed_files(base: str | None) -> list[str]:
     files: set[str] = set()
     if base:
@@ -37,7 +46,12 @@ def changed_files(base: str | None) -> list[str]:
         files.update(run_git(["diff", "--name-only", "--"]))
         files.update(run_git(["diff", "--cached", "--name-only", "--"]))
     files.update(run_git(["ls-files", "--others", "--exclude-standard"]))
-    return sorted(files)
+    kept = [
+        f
+        for f in files
+        if f not in GENERATED_FILES and not any(f.startswith(p) for p in GENERATED_PREFIXES)
+    ]
+    return sorted(kept)
 
 
 def parse_drift_map(path: Path) -> list[dict[str, object]]:

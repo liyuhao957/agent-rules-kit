@@ -2,6 +2,8 @@
 
 Claude memory and Codex memory are private agent hints. They are not shared project truth.
 
+Claude auto-memory lives per-machine under `~/.claude/projects/<project>/memory/`; Codex memories (experimental, off by default) live globally under `~/.codex/memories/`. Neither is visible to the other tool, another machine, or a teammate — which is exactly why durable facts belong in the repo.
+
 ## Use Private Memory For
 
 - User interaction preferences.

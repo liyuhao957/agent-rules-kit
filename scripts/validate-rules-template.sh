@@ -28,7 +28,6 @@ need_contains "CLAUDE.md" "@AGENTS.md"
 
 for file in \
   ".agent/index.md" \
-  ".agent/source-of-truth.md" \
   ".agent/quality-gates.md" \
   ".agent/memory-policy.md" \
   ".agent/skill-policy.md" \
@@ -55,9 +54,25 @@ for domain in ui-copy build-test data-sync localization performance release; do
   need_file ".agent/domains/$domain.md"
 done
 
-for skill in adapt-rules implement review continue quality-gate doc-drift drift-check rule-health release-safety; do
-  need_file ".agents/skills/$skill/SKILL.md"
+# .claude/skills is the canonical skill tree. .agents/skills (Codex) is
+# generated at install time; when present (installed projects) it must be
+# identical so the two tools never diverge.
+for skill in adapt-rules implement review-changes continue quality-gate doc-drift rule-health release-safety; do
   need_file ".claude/skills/$skill/SKILL.md"
+done
+
+if [ -d "$root/.agents/skills" ]; then
+  diff -r "$root/.claude/skills" "$root/.agents/skills" >/dev/null 2>&1 \
+    || fail ".agents/skills differs from canonical .claude/skills (regenerate it at install)"
+fi
+
+# Path-scoped pointer rules: Claude's on-demand loading of domain docs.
+for rule in ui-copy data-sync build-test localization release performance rules-kit; do
+  need_file ".claude/rules/$rule.md"
+  need_contains ".claude/rules/$rule.md" "paths:"
+done
+for rule in ui-copy data-sync build-test localization release performance; do
+  need_contains ".claude/rules/$rule.md" ".agent/domains/"
 done
 
 need_dir ".claude/agents"
@@ -66,10 +81,17 @@ need_file ".claude/settings.example.json"
 need_file "scripts/bootstrap-project-context.py"
 need_file ".codex/hooks/stop_quality_reminder.py"
 need_file ".codex/hooks/pre_bash_release_guard.py"
+need_file ".codex/hooks/post_edit_domain_router.py"
 need_file ".claude/hooks/stop_quality_reminder.py"
 need_file ".claude/hooks/pre_bash_release_guard.py"
 need_file "scripts/check-doc-drift.py"
 need_file "scripts/suggest-rule-updates.py"
+
+# The two stop hooks must stay identical (same contract on both tools).
+diff "$root/.claude/hooks/stop_quality_reminder.py" "$root/.codex/hooks/stop_quality_reminder.py" >/dev/null 2>&1 \
+  || fail ".claude and .codex stop_quality_reminder.py copies differ"
+diff "$root/.claude/hooks/pre_bash_release_guard.py" "$root/.codex/hooks/pre_bash_release_guard.py" >/dev/null 2>&1 \
+  || fail ".claude and .codex pre_bash_release_guard.py copies differ"
 
 need_contains "AGENTS.md" "Private Claude memory and private Codex memory are not shared project truth"
 need_contains "AGENTS.md" ".agent/adaptation-review.md"
@@ -77,10 +99,14 @@ need_contains "AGENTS.md" "python3 scripts/suggest-rule-updates.py"
 need_contains "AGENTS.md" "python3 scripts/check-doc-drift.py"
 need_contains "AGENTS.md" "python3 scripts/bootstrap-project-context.py"
 need_contains "AGENTS.md" "Durable rules stay in repository-visible"
+need_contains "AGENTS.md" "On-Demand Context Routing"
+need_contains "CLAUDE.md" ".claude/rules/"
 need_contains ".agent/adaptation-review.md" "Status:"
 need_contains ".agent/adaptation-review.md" "BEGIN GENERATED ADAPTATION EVIDENCE"
 need_contains ".agent/workflows/adapt-rules.md" "--require-adapted"
 need_contains ".agent/workflows/adapt-rules.md" "--require-candidates-reviewed"
+need_contains ".agent/workflows/adapt-rules.md" "mirror them into"
+need_contains ".agent/index.md" "Task Lifecycle"
 need_contains ".agent/quality-gates.md" "Intent Loop"
 need_contains ".agent/quality-gates.md" "Drift Loop"
 need_contains ".agent/quality-gates.md" "python3 scripts/check-doc-drift.py"
@@ -103,6 +129,7 @@ need_contains ".agent/drift-map.yml" "rules:"
 need_contains ".agent/drift-map.yml" "command-contract"
 need_contains "scripts/check-doc-drift.py" "Doc drift check:"
 need_contains "scripts/suggest-rule-updates.py" "Rule candidates:"
+need_contains "scripts/suggest-rule-updates.py" "segmentize"
 need_contains "scripts/bootstrap-project-context.py" "Bootstrap complete:"
 need_contains "scripts/bootstrap-project-context.py" "GENERATED PROJECT DRIFT CANDIDATES"
 need_contains "scripts/bootstrap-project-context.py" "GENERATED ADAPTATION EVIDENCE"
@@ -112,7 +139,11 @@ need_contains ".claude/hooks/pre_bash_release_guard.py" "RULES_HOOK_ALLOW_RISK"
 need_contains ".claude/hooks/pre_bash_release_guard.py" "Rules hook blocked a high-risk shell command"
 need_contains ".codex/hooks/stop_quality_reminder.py" "RULES_HOOK_ALLOW_PENDING"
 need_contains ".codex/hooks/stop_quality_reminder.py" "Rules hook blocked finalization"
+need_contains ".codex/hooks/stop_quality_reminder.py" "stop_hook_active"
 need_contains ".claude/hooks/stop_quality_reminder.py" "RULES_HOOK_ALLOW_PENDING"
 need_contains ".claude/hooks/stop_quality_reminder.py" "Rules hook blocked finalization"
+need_contains ".claude/hooks/stop_quality_reminder.py" "stop_hook_active"
+need_contains ".codex/hooks/post_edit_domain_router.py" "additionalContext"
+need_contains ".codex/hooks.example.json" "post_edit_domain_router.py"
 
 printf 'OK: rules template is structurally complete at %s\n' "$root"

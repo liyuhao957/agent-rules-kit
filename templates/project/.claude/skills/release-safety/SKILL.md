@@ -5,16 +5,7 @@ description: Use explicitly for release, publish, deploy, production, signing, b
 
 # Release Safety
 
-This skill should be explicitly invoked for high-risk external operations.
-
-## Workflow
-
-1. Read `.agent/workflows/release.md`.
-2. Read `.agent/domains/release.md`.
-3. Confirm scope if ambiguity affects users, money, data, irreversible state, or release target.
-4. Verify local dirty state, auth, version, environment, and remote target with real tools.
-5. Run required validation.
-6. Make the smallest safe external change.
-7. Verify remote result with real output.
-8. Final reply must include exact evidence and remaining risk.
-
+1. Follow `.agent/workflows/release.md` and `.agent/domains/release.md`.
+2. Confirm scope when ambiguity affects users, money, data, irreversible state, or the release target.
+3. Verify auth, version, environment, and remote target with real tools before acting; verify the remote result after.
+4. Final reply must include exact evidence and remaining risk.

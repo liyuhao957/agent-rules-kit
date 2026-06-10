@@ -35,6 +35,8 @@ Project hooks are mechanical guards around this repo-native contract.
 Rules installs hook configs by default, but they should stay narrow enough to
 avoid blocking ordinary exploration:
 
-- Hooks block only narrow high-risk shell commands and non-trivial finalization with pending rule candidates.
+- Hooks block only narrow high-risk shell commands and non-trivial finalization with pending rule candidates. The doc-drift report and the Codex domain router are advisory and never block.
+- Both tools require one-time trust before project hooks run: Claude Code asks to approve project settings/hooks; Codex requires trusting the project `.codex/` layer and reviewing hooks via `/hooks`. Freshly cloned guards are inert until then.
+- On a Stop-hook block, the agent does not halt — both tools treat it as "continue and resolve the listed items first."
 - `RULES_HOOK_ALLOW_RISK=1` and `RULES_HOOK_ALLOW_PENDING=1` are escape hatches for intentional, reviewed operations.
 - Hooks do not prove correctness; tests, builds, live tool output, and current code still provide the evidence.

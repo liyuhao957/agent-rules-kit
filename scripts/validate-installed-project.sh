@@ -66,6 +66,11 @@ if [[ ! -f "$target/.claude/settings.json" ]]; then
   exit 1
 fi
 
+if [[ ! -d "$target/.agents/skills" ]]; then
+  echo "FAIL: missing .agents/skills. The installer generates the Codex skill tree from .claude/skills." >&2
+  exit 1
+fi
+
 if [[ -x "$target/scripts/check-doc-drift.py" ]]; then
   (cd "$target" && python3 scripts/check-doc-drift.py >/dev/null)
 else

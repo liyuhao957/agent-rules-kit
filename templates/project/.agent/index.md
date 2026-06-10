@@ -1,55 +1,55 @@
 # Agent Index
 
-This directory is the shared project protocol for Claude Code and Codex.
+Routing map for the shared project protocol. Load only what the current task needs; every doc is a map, not proof — verify against current code before relying on it.
 
-Read this file for non-trivial work, then load only the workflow and domain docs that match the task.
+## Task Lifecycle
 
-## Always Apply
+1. **Start**: if `.agent/adaptation-review.md` says `Status: pending`, run `.agent/workflows/adapt-rules.md` before ordinary work.
+2. **Route**: pick the workflow for the task type and the domain docs for the touched areas (tables below).
+3. **Implement**: smallest change that closes the user-visible loop; verify doc claims against current code first.
+4. **Finalize**: apply `.agent/quality-gates.md`; run `python3 scripts/check-doc-drift.py` (advisory doc list) and `python3 scripts/suggest-rule-updates.py`; resolve every pending item in `.agent/rule-candidates.md`.
+5. **Hand off**: write `.agent/work/current.md` (shape: `.agent/handoff-template.md`) only if work remains or another agent continues.
 
-- `.agent/adaptation-review.md`
-- `.agent/source-of-truth.md`
-- `.agent/quality-gates.md`
-- `.agent/memory-policy.md`
-- `.agent/skill-policy.md`
-- `.agent/tool-policy.md`
-- `.agent/command-contract.md`
-- `.agent/doc-drift.md`
-- `.agent/drift-map.yml`
-- `.agent/rule-candidates.md`
-- `.agent/rule-health.md`
+## By Task Type
 
-## Workflows
+| Task | Load |
+|---|---|
+| Implement or fix | `.agent/workflows/implement.md` |
+| Review changes | `.agent/workflows/review.md` |
+| Continue unfinished work | `.agent/workflows/continue.md` |
+| Release / external state | `.agent/workflows/release.md` + `.agent/domains/release.md` |
+| Install / adapt rules | `.agent/workflows/adapt-rules.md` |
 
-- Installing/adapting Rules: `.agent/workflows/adapt-rules.md`
-- Implementing or fixing: `.agent/workflows/implement.md`
-- Reviewing another change: `.agent/workflows/review.md`
-- Continuing unfinished work: `.agent/workflows/continue.md`
-- Release or external-state work: `.agent/workflows/release.md`
+## By Touched Area
 
-## Domains
+Claude Code auto-loads these pointers via `.claude/rules/` when matching files are read; Codex gets them injected by the PostToolUse router hook after edits. Either way the canonical docs are:
 
-- UI, UX, copy: `.agent/domains/ui-copy.md`
-- Build, test, device, local runtime: `.agent/domains/build-test.md`
-- Data, persistence, sync, migration, backup, destructive flows: `.agent/domains/data-sync.md`
-- Localization and user-visible strings: `.agent/domains/localization.md`
-- Performance and scalability: `.agent/domains/performance.md`
-- Release, store, publishing, production operations: `.agent/domains/release.md`
+| Area | Load |
+|---|---|
+| UI, components, screens, copy | `.agent/domains/ui-copy.md` |
+| Data, models, migrations, sync | `.agent/domains/data-sync.md` |
+| Build, test, CI, commands | `.agent/domains/build-test.md` + `.agent/command-contract.md` |
+| Localization, strings | `.agent/domains/localization.md` |
+| Performance, benchmarks | `.agent/domains/performance.md` |
+| Release, signing, deploy, store | `.agent/domains/release.md` |
 
-## Shared Product Context
+After editing, `python3 scripts/check-doc-drift.py` lists the mapped docs for your actual diff — prefer that mechanical list over loading everything.
 
-- Durable product principles: `.agent/product-invariants.md`
+## At Finalize
+
+- Quality loops: `.agent/quality-gates.md`
+- Evidence choices: `.agent/verification-map.md`
+- Verified commands: `.agent/command-contract.md`
+- Drift policy and map: `.agent/doc-drift.md`, `.agent/drift-map.yml`
+- Candidate inbox (must be drained): `.agent/rule-candidates.md`
+
+## Reference (load when the topic comes up)
+
+- Durable product promises: `.agent/product-invariants.md`
 - Core user paths: `.agent/user-journeys.md`
-- Auto-generated project map: `.agent/project-map.md`
-- Auto-generated bootstrap review report: `.agent/bootstrap-report.md`
-- Rules adaptation status: `.agent/adaptation-review.md`
+- Memory / skills / tools policies: `.agent/memory-policy.md`, `.agent/skill-policy.md`, `.agent/tool-policy.md`
+- Rules maintenance: `.agent/rule-health.md`
 - Long-lived decisions: `.agent/decisions/`
-- Temporary handoff notes: `.agent/work/current.md` when present
-- Documentation drift discovery: `python3 scripts/check-doc-drift.py`
-- Automatic rule-growth inbox: `.agent/rule-candidates.md` via `python3 scripts/suggest-rule-updates.py`
-- Current validation command inventory: `.agent/command-contract.md`
-- Rules-kit maintenance principles: `.agent/rule-health.md`
+- Auto-generated map and report: `.agent/project-map.md`, `.agent/bootstrap-report.md`
+- Adaptation status: `.agent/adaptation-review.md`
 - Outside practices absorbed into this kit: `.agent/external-practices.md`
-
-## Rule
-
-Every task-specific doc is a map, not proof. After reading it, verify the relevant facts in the current repo or real tool output before editing or reporting.

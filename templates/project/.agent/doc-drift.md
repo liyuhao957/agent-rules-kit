@@ -13,6 +13,8 @@ python3 scripts/suggest-rule-updates.py
 
 The drift script reads `.agent/drift-map.yml`, checks current git changes, and reports which shared docs may need review. `suggest-rule-updates.py` writes those signals into `.agent/rule-candidates.md` along with command, backup, and high-risk candidates.
 
+The same drift-map globs drive on-demand loading (`.claude/rules/*.md` for Claude, the Codex PostToolUse router for Codex). When you change globs in `.agent/drift-map.yml`, mirror them into `.claude/rules/*.md` frontmatter.
+
 A candidate is a review signal, not proof that docs must change. The agent should decide autonomously from current evidence and mark each candidate `promoted`, `checked-unchanged`, `rejected`, or `needs-user`.
 
 ## Update Docs When Changing

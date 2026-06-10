@@ -28,9 +28,9 @@ Use explicit skill invocation or manually follow the skill for:
 
 ## Skill Design
 
-- Keep skill descriptions precise and front-loaded with trigger words.
-- Keep skill instructions short and point to shared `.agent/` docs.
-- Do not duplicate long policy text separately for Claude and Codex.
+- Keep skill descriptions precise and front-loaded with trigger words. Both tools budget skill listings (Claude ~1% of context; Codex ~2% / 8k chars), so vague or long descriptions degrade auto-invocation.
+- Keep skill instructions short and point to shared `.agent/` docs; invoked skill text stays in context for the rest of the session.
+- Do not duplicate long policy text separately for Claude and Codex. `.claude/skills/` is the canonical tree; `.agents/skills/` is generated from it at install time and must stay identical.
 - If a relevant skill fails to trigger automatically, invoke it manually or follow its referenced workflow.
 - Skills should call shared scripts such as `python3 scripts/check-doc-drift.py` when a mechanical signal is more reliable than model judgment.
 - Skills are adapters, not the rule source. Durable project rules stay in repository-visible `AGENTS.md` and `.agent/*` files so Claude, Codex, and humans can diff and review the same contract.

@@ -7,7 +7,7 @@
             "type": "command",
             "command": "python3 .codex/hooks/stop_quality_reminder.py",
             "timeout": 10,
-            "statusMessage": "Checking project quality reminders"
+            "statusMessage": "Checking pending rule candidates"
           }
         ]
       }
@@ -24,7 +24,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .codex/hooks/post_edit_domain_router.py",
+            "timeout": 10,
+            "statusMessage": "Routing domain docs for edited paths"
+          }
+        ]
+      }
     ]
   }
 }
-

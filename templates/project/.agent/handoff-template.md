@@ -6,6 +6,12 @@ Copy this shape into `.agent/work/current.md` only when work is unfinished, anot
 
 What the user wanted.
 
+## Baseline
+
+- Agent/tool: which agent wrote this and when.
+- Baseline commit: output of `git rev-parse HEAD` when work started.
+- Branch: current branch.
+
 ## Current State
 
 What is done, what remains, and what assumptions were made.

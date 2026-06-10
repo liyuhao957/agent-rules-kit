@@ -6,7 +6,7 @@ Use when adding or changing behavior.
 
 1. Restate the outcome and identify the affected user path.
 2. Inspect `git status` and relevant current code/config.
-3. Read the relevant `.agent/domains/*` docs.
+3. Load only the domain docs the task touches: route via `.agent/index.md` before editing; after editing, `python3 scripts/check-doc-drift.py` lists the mapped docs for your actual diff. (Claude auto-loads pointers via `.claude/rules/`; Codex gets them from the PostToolUse router.)
 4. Verify doc claims against current evidence before relying on them.
 5. Implement the smallest change that closes the requested loop.
 6. Check related entry points, state transitions, UI/copy, data, and error paths.

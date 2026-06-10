@@ -19,6 +19,14 @@ from pathlib import Path
 ALLOWED_STATUSES = {"pending", "promoted", "checked-unchanged", "rejected", "needs-user"}
 UNRESOLVED_STATUSES = {"pending"}
 
+# Kit-generated files must not create candidates about themselves.
+GENERATED_FILES = {
+    ".agent/bootstrap-report.md",
+    ".agent/project-map.md",
+    ".agent/rule-candidates.md",
+}
+GENERATED_PREFIXES = (".agent/work/",)
+
 
 def run_git(args: list[str]) -> list[str]:
     result = subprocess.run(
@@ -41,7 +49,12 @@ def changed_files(base: str | None) -> list[str]:
         files.update(run_git(["diff", "--name-only", "--"]))
         files.update(run_git(["diff", "--cached", "--name-only", "--"]))
     files.update(run_git(["ls-files", "--others", "--exclude-standard"]))
-    return sorted(files)
+    kept = [
+        f
+        for f in files
+        if f not in GENERATED_FILES and not any(f.startswith(p) for p in GENERATED_PREFIXES)
+    ]
+    return sorted(kept)
 
 
 def read_text(path: Path, limit: int = 200_000) -> str:
@@ -262,16 +275,67 @@ def backup_candidates() -> list[dict[str, object]]:
     return candidates
 
 
+def segmentize(path: str) -> str:
+    """Lowercase a path with camelCase boundaries turned into separators.
+
+    "src/ProductCard.tsx" -> "src/product-card.tsx" so word-boundary regexes
+    can tell "prod" (deploy target) apart from "Product" (domain noun).
+    """
+    split_camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", path)
+    split_acronym = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "-", split_camel)
+    return split_acronym.lower()
+
+
+# Word-boundary patterns applied to segmentized paths. Raw substring matching
+# is forbidden here: "prod" must not match ProductCard.tsx, "cloud" must not
+# match cloudinaryHelper.ts. Boundaries are path/word separators: / _ . -
+_B = r"(^|[-_./])"
+_E = r"([-_./]|$)"
+HIGH_RISK_PATTERNS = {
+    "release": (
+        rf"{_B}fastlane{_E}",
+        r"(^|/)\.github/workflows(/|$)",
+        rf"{_B}deploy(ment)?s?{_E}",
+        rf"{_B}signing{_E}",
+        r"\.entitlements$",
+        rf"{_B}export-?options\.plist$",
+        rf"{_B}helm{_E}",
+        rf"{_B}terraform{_E}",
+    ),
+    "secrets": (
+        r"(^|/)\.env([-_.]|$)",
+        rf"{_B}secrets?{_E}",
+        rf"{_B}credentials?{_E}",
+        r"private[-_]?key",
+        rf"{_B}api[-_]?keys?{_E}",
+    ),
+    "remote": (
+        rf"{_B}prod(uction)?{_E}",
+        rf"{_B}firebase{_E}",
+        rf"{_B}supabase{_E}",
+        rf"{_B}s3{_E}",
+        rf"{_B}remote{_E}",
+    ),
+    "billing": (
+        rf"{_B}pricing{_E}",
+        rf"{_B}billing{_E}",
+        rf"{_B}subscriptions?{_E}",
+        rf"{_B}purchases?{_E}",
+        rf"{_B}revenue{_E}",
+        rf"{_B}paywall{_E}",
+        rf"{_B}iap{_E}",
+    ),
+}
+
+
 def risk_candidates(files: list[str]) -> list[dict[str, object]]:
-    high_risk_patterns = {
-        "release": ("fastlane", "release", "deploy", "signing", "entitlements", ".github/workflows"),
-        "secrets": (".env", "secret", "private_key", "apikey", "api_key", "credential"),
-        "remote": ("production", "prod", "remote", "firebase", "supabase", "cloud", "s3"),
-        "billing": ("pricing", "subscription", "purchase", "billing", "revenue"),
-    }
     candidates: list[dict[str, object]] = []
-    for name, patterns in high_risk_patterns.items():
-        matched = [file_path for file_path in files if any(pattern.lower() in file_path.lower() for pattern in patterns)]
+    for name, patterns in HIGH_RISK_PATTERNS.items():
+        matched = [
+            file_path
+            for file_path in files
+            if any(re.search(pattern, segmentize(file_path)) for pattern in patterns)
+        ]
         if not matched:
             continue
         candidates.append(

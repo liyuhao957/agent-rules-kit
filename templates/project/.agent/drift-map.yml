@@ -5,6 +5,16 @@
 #   This file does not decide that docs must change. It only makes the
 #   "should we check docs?" signal visible to agents and users.
 #
+#   The same path globs are mirrored in two on-demand loaders:
+#   - .claude/rules/*.md `paths:` frontmatter (Claude auto-loads domain pointers)
+#   - .codex/hooks/post_edit_domain_router.py (Codex injects domain pointers after edits)
+#   When you change globs here, mirror the change in .claude/rules/.
+#
+# Precision rule:
+#   Prefer directory-scoped globs over bare extension or substring globs.
+#   A glob that matches most commits in this repo is noise, not signal —
+#   tighten it during adapt-rules and whenever drift output gets noisy.
+#
 # Syntax:
 #   - name: short label
 #     paths:
@@ -26,7 +36,6 @@ rules:
       - ".codex/**"
     docs:
       - ".agent/index.md"
-      - ".agent/source-of-truth.md"
       - ".agent/doc-drift.md"
       - ".agent/skill-policy.md"
       - ".agent/tool-policy.md"
@@ -46,6 +55,9 @@ rules:
       - "justfile"
       - "Gemfile"
       - "Podfile"
+      - "pyproject.toml"
+      - "Cargo.toml"
+      - "go.mod"
       - "scripts/**"
       - ".github/workflows/**"
     docs:
@@ -57,41 +69,34 @@ rules:
   - name: ui-copy
     paths:
       - "app/**"
+      - "src/app/**"
       - "components/**"
-      - "Components/**"
-      - "views/**"
-      - "Views/**"
       - "pages/**"
+      - "layouts/**"
+      - "views/**"
       - "screens/**"
-      - "Screens/**"
-      - "**/Views/**"
-      - "**/View/**"
-      - "**/Screens/**"
-      - "**/Screen/**"
+      - "**/components/**"
       - "**/Components/**"
-      - "**/Component/**"
-      - "**/*View*"
-      - "**/*Screen*"
-      - "**/*Component*"
-      - "**/*.tsx"
-      - "**/*.jsx"
-      - "**/*.vue"
-      - "**/*.svelte"
-      - "**/*.css"
+      - "**/views/**"
+      - "**/Views/**"
+      - "**/screens/**"
+      - "**/Screens/**"
+      - "**/pages/**"
+      - "**/layouts/**"
     docs:
       - ".agent/domains/ui-copy.md"
       - ".agent/user-journeys.md"
-      - ".agent/quality-gates.md"
     reason: "UI, interaction, layout, or user-visible copy may have changed."
 
   - name: localization
     paths:
-      - "**/Localizable.strings"
       - "**/*.lproj/**"
       - "**/locales/**"
       - "**/i18n/**"
       - "**/translations/**"
       - "**/*.strings"
+      - "**/*.stringsdict"
+      - "**/*.xcstrings"
       - "**/*.arb"
       - "**/*.po"
       - "**/*.xliff"
@@ -102,19 +107,18 @@ rules:
 
   - name: data-sync
     paths:
+      - "db/**"
+      - "prisma/**"
+      - "drizzle/**"
+      - "supabase/migrations/**"
+      - "**/models/**"
       - "**/Models/**"
-      - "**/Model/**"
+      - "**/schema/**"
       - "**/Schema/**"
+      - "**/migrations/**"
       - "**/Migrations/**"
-      - "**/Migration/**"
+      - "**/stores/**"
       - "**/Stores/**"
-      - "**/Store/**"
-      - "**/Services/**"
-      - "**/*Sync*"
-      - "**/*Migration*"
-      - "**/*Backup*"
-      - "**/*Import*"
-      - "**/*Export*"
       - "**/*.sql"
       - "**/*.xcdatamodeld/**"
     docs:
@@ -135,11 +139,17 @@ rules:
       - "justfile"
       - "Gemfile"
       - "Podfile"
+      - "pyproject.toml"
+      - "Cargo.toml"
+      - "go.mod"
       - ".github/workflows/**"
       - "scripts/**"
+      - "test/**"
       - "tests/**"
+      - "**/__tests__/**"
       - "**/*Tests/**"
-      - "**/*Test*"
+      - "**/*.test.*"
+      - "**/*.spec.*"
     docs:
       - ".agent/domains/build-test.md"
       - ".agent/command-contract.md"
@@ -150,15 +160,16 @@ rules:
     paths:
       - ".github/workflows/**"
       - "fastlane/**"
-      - "docs/**release**"
-      - "docs/**deploy**"
-      - "docs/**store**"
+      - "deploy/**"
+      - "deployment/**"
+      - "helm/**"
+      - "terraform/**"
+      - "Dockerfile"
+      - "docker-compose*"
       - "ExportOptions.plist"
-      - "**/*Release*"
-      - "**/*Deploy*"
-      - "**/*Signing*"
-      - "**/*Entitlements*"
       - "**/*.entitlements"
+      - "**/*Signing*"
+      - ".releaserc*"
     docs:
       - ".agent/domains/release.md"
       - ".agent/workflows/release.md"
@@ -167,13 +178,12 @@ rules:
 
   - name: performance
     paths:
-      - "**/*Performance*"
+      - "perf/**"
+      - "benchmarks/**"
+      - "**/benchmarks/**"
       - "**/*Benchmark*"
-      - "**/*Cache*"
-      - "**/*Query*"
-      - "**/*Index*"
-      - "**/*Pagination*"
+      - "**/*Performance*"
     docs:
       - ".agent/domains/performance.md"
       - ".agent/verification-map.md"
-    reason: "Performance-sensitive paths, metrics, cache, or benchmark behavior may have changed."
+    reason: "Performance-sensitive paths, metrics, or benchmark behavior may have changed."

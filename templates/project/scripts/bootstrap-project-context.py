@@ -176,24 +176,40 @@ def command_candidates(root: Path) -> list[tuple[str, str, str]]:
     return candidates
 
 
+def segmentize(path: str) -> str:
+    """Lowercase a path with camelCase boundaries turned into separators.
+
+    Keep in sync with scripts/suggest-rule-updates.py. Word-boundary matching
+    on segmentized paths keeps "Product" from matching "prod" and
+    "importHelpers" from matching a data-import signal by accident.
+    """
+    split_camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", path)
+    split_acronym = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "-", split_camel)
+    return split_acronym.lower()
+
+
+_B = r"(^|[-_./])"
+_E = r"([-_./]|$)"
+
+
 def classify_paths(root: Path, files: list[Path]) -> dict[str, list[str]]:
     rels = [rel(path, root) for path in files]
 
     def pick(patterns: tuple[str, ...], limit: int = 20) -> list[str]:
         matches: list[str] = []
         for item in rels:
-            lower = item.lower()
-            if any(pattern.lower() in lower for pattern in patterns):
+            segmented = segmentize(item)
+            if any(re.search(pattern, segmented) for pattern in patterns):
                 matches.append(item)
         return sorted(matches)[:limit]
 
     return {
-        "ui": pick(("/views/", "/view/", "/components/", "/component/", "/screens/", "/screen/", "view.", "screen.", "component.")),
-        "models": pick(("/models/", "/model/", "model.", "schema", "migration")),
-        "services": pick(("/services/", "/service/", "sync", "backup", "import", "export")),
-        "tests": pick(("/tests/", "test.", "tests.", "spec.")),
-        "release": pick(("fastlane", "exportoptions", "entitlements", ".github/workflows", "release", "deploy", "signing")),
-        "localization": pick((".lproj/", "locales/", "/locales/", "locale/", "/locale/", "i18n/", "/i18n/", "translations/", "/translations/", "localizable.strings", ".strings", ".xliff", ".arb")),
+        "ui": pick((r"/views?/", r"/components?/", r"/screens?/", r"/pages/", r"/layouts/", rf"{_B}view\.", rf"{_B}screen\.")),
+        "models": pick((r"/models?/", r"/schemas?/", rf"{_B}schema{_E}", rf"{_B}migrations?{_E}")),
+        "services": pick((r"/services?/", rf"{_B}sync{_E}", rf"{_B}backups?{_E}", rf"{_B}(import|export)(er|ers)?{_E}")),
+        "tests": pick((r"/tests?/", r"/__tests__/", rf"{_B}tests?\.", rf"{_B}spec\.", r"\.test\.", r"\.spec\.")),
+        "release": pick((rf"{_B}fastlane{_E}", rf"{_B}export-?options", r"\.entitlements$", r"\.github/workflows", rf"{_B}releases?{_E}", rf"{_B}deploy(ment)?s?{_E}", rf"{_B}signing{_E}")),
+        "localization": pick((r"\.lproj/", r"/locales?/", r"/i18n/", r"/translations/", r"\.strings$", r"\.stringsdict$", r"\.xcstrings$", r"\.xliff$", r"\.arb$", r"\.po$")),
     }
 
 

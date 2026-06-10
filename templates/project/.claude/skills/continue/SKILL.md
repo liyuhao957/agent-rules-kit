@@ -1,18 +1,11 @@
 ---
 name: continue
-description: Use when Claude Code is continuing unfinished work from Codex, another Claude session, a human, or a previous handoff. Reconstruct state from current files and git before proceeding.
+description: Use when the agent is continuing unfinished work from another agent (Claude or Codex), another session, a human, or a previous handoff. Reconstruct state from current files and git before proceeding.
 ---
 
 # Continue
 
-Use this skill when taking over unfinished work.
-
-## Workflow
-
-1. Read `.agent/index.md`.
-2. Read `.agent/workflows/continue.md`.
-3. Inspect actual `git status` and current diff first.
-4. Read `.agent/work/current.md` if present, only as intent/risk context.
-5. Continue with implement or review workflow as appropriate.
-6. Update or clear the handoff note when state changes.
-
+1. Follow `.agent/workflows/continue.md`.
+2. Reconstruct state from `git status` and the current diff; `.agent/work/current.md` is intent and risk context, not proof.
+3. Protect user-owned local changes; never revert work you cannot attribute.
+4. Then continue via the implement or review-changes workflow.

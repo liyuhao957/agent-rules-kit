@@ -146,11 +146,17 @@ fi
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] copy template files from $template_dir to $target"
   echo "[dry-run] write active hook configs from .codex/hooks.example.json and .claude/settings.example.json"
+  echo "[dry-run] generate .agents/skills (Codex) from canonical .claude/skills"
 else
   mkdir -p "$target"
   cp -R "$template_dir"/. "$target"/
   cp "$target/.codex/hooks.example.json" "$target/.codex/hooks.json"
   cp "$target/.claude/settings.example.json" "$target/.claude/settings.json"
+  # .claude/skills is the canonical tree; the Codex tree is generated, never
+  # hand-maintained, so the two cannot drift apart.
+  rm -rf "$target/.agents"
+  mkdir -p "$target/.agents"
+  cp -R "$target/.claude/skills" "$target/.agents/skills"
   find "$target" -path '*/__pycache__*' -prune -exec rm -rf {} + 2>/dev/null || true
   chmod +x "$target/scripts/check-doc-drift.py" \
     "$target/scripts/bootstrap-project-context.py" \
@@ -188,3 +194,4 @@ else
   echo "Rules kit installed."
   echo "Status: pending agent adaptation. Next, run python3 scripts/bootstrap-project-context.py, then have Claude/Codex follow .agent/workflows/adapt-rules.md."
 fi
+echo "One-time setup: restart the agent session so new skills are discovered, and approve project hooks on first use (Claude: settings approval; Codex: trust .codex and review via /hooks). Hooks are inert until trusted."

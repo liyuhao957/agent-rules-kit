@@ -30,17 +30,17 @@ Convert installed generic Rules into project-specific working rules by inspectin
    - `.agent/user-journeys.md`
    - `.agent/command-contract.md`
    - relevant `.agent/domains/*`
-   - `.agent/drift-map.yml`
+   - `.agent/drift-map.yml` — tighten the default globs to this project's real paths, then mirror them into `.claude/rules/*.md` frontmatter so Claude's auto-loading stays in step
 7. Put unverified, risky, remote, credential, device, pricing, production, or release facts into `.agent/adaptation-review.md` under "Unverified / Needs User Confirmation".
 8. Mark `.agent/adaptation-review.md`:
    - `Status: adapted`
    - `Adapted by: <agent/tool and date>`
    - check every completed evidence item
 9. Run `python3 scripts/suggest-rule-updates.py` and handle every candidate in `.agent/rule-candidates.md` without asking the user unless the current task depends on an unprovable high-risk fact.
-10. Run:
+10. Run the validator from the rules-kit clone recorded in `.agent/rules-kit.json` (`source` field):
 
    ```bash
-   bash /Users/ct/code/Rules/scripts/validate-installed-project.sh . --require-adapted --require-candidates-reviewed
+   bash <rules-kit-source>/scripts/validate-installed-project.sh . --require-adapted --require-candidates-reviewed
    python3 scripts/check-doc-drift.py
    ```
 

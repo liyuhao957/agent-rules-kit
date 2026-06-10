@@ -4,11 +4,11 @@ This file is the shared project entrypoint for Codex, Claude Code through `CLAUD
 
 ## Read First
 
-- For non-trivial work, read `.agent/index.md`, then only the workflow/domain docs relevant to the current task.
-- If `.agent/adaptation-review.md` says `Status: pending`, run `.agent/workflows/adapt-rules.md` first. Installed templates and bootstrap candidates are not project rules until an agent has reviewed current code/config and marked adaptation complete.
+- If `.agent/adaptation-review.md` says `Status: pending`, run `.agent/workflows/adapt-rules.md` first. Installed templates and bootstrap candidates are not project rules until an agent has verified them against current code.
+- Load context on demand, not up front. `.agent/index.md` routes by task type and touched area; do not preload every `.agent/*` doc.
 - Project docs are navigation and context, not proof. Verify task-critical facts in current code, config, tool output, tests, builds, or live remote state before acting.
 - Do not trust another agent's summary, handoff note, memory, or old report as proof. Use them as clues.
-- Treat documented commands as examples until verified; use `.agent/command-contract.md` to find and maintain current validation commands.
+- Treat documented commands as examples until verified; `.agent/command-contract.md` holds the verified inventory.
 
 ## Source Of Truth
 
@@ -19,15 +19,22 @@ Priority order:
 3. Shared project docs under `.agent/`, `AGENTS.md`, and `CLAUDE.md`.
 4. README files, issues, previous handoffs, memories, and old summaries.
 
-If docs conflict with current evidence, follow current evidence, keep the change conservative, and mention the conflict if it affected the work.
+If docs conflict with current evidence, follow current evidence, keep the change conservative, and mention the conflict if it affected the work. Do not preserve stale implementation shape as a hard rule unless it is clearly marked as a safety constraint. Do not claim something was verified unless it was checked in the current turn.
+
+## On-Demand Context Routing
+
+- `.agent/index.md` is the routing map: task type → workflow doc, touched area → domain doc. Load only what the task needs.
+- Claude Code: path-scoped pointers in `.claude/rules/` auto-load when matching files are read.
+- Codex: a PostToolUse hook injects the same domain pointers after file edits; skills load workflows on demand.
+- After editing, `python3 scripts/check-doc-drift.py` mechanically lists which shared docs map to your diff — use it instead of guessing or loading everything.
 
 ## Cross-Agent Workflow
 
-This project may be implemented, reviewed, continued, or closed by Claude Code or Codex in any order.
+This project may be implemented, reviewed, continued, or closed by Claude Code or Codex in any order — one feature by one agent, the next feature or the review by the other.
 
 - Role matters more than tool: an agent may be Implementer, Reviewer, Continuer, or Closer.
 - Before continuing or reviewing work, inspect `git status`, the current diff, relevant code paths, and available verification output.
-- Handoff notes explain intent and risk; they do not prove what is currently true.
+- When stopping mid-task or handing to the other agent, write `.agent/work/current.md` using `.agent/handoff-template.md`. Handoff notes explain intent and risk; they do not prove what is currently true.
 - Private Claude memory and private Codex memory are not shared project truth. Shared durable facts belong in repository-visible files.
 
 ## Quality Contract
@@ -47,12 +54,11 @@ Done does not mean "code changed." Done means the affected loops are closed or e
 
 - Skills are workflow loaders, not guarantees. Use automatic invocation when it triggers, but explicitly invoke or follow the relevant skill for high-risk work.
 - MCP tools, CLIs, browser automation, device tools, database tools, and remote APIs are evidence sources. Use them when the task depends on live or private state.
-- Durable rules stay in repository-visible `AGENTS.md` and `.agent/*`; skills and MCP/tool integrations should load or wrap those rules, not replace them.
+- Durable rules stay in repository-visible `AGENTS.md` and `.agent/*`; skills, rules pointers, and MCP/tool integrations load or wrap those rules, not replace them.
 - If a required tool is unavailable, say so. Do not infer live state from docs, memory, or another agent's summary.
-- Use `python3 scripts/check-doc-drift.py` before finalizing non-trivial changes to discover which shared docs may need review.
-- Use `python3 scripts/suggest-rule-updates.py` before finalizing non-trivial changes; decide candidates autonomously and update `.agent/*` when current evidence supports it.
-- Use `python3 scripts/bootstrap-project-context.py` after installing Rules or after large structure changes to refresh project-map, generated command candidates, drift candidates, and bootstrap-report.
-- Use `.agent/rule-health.md` when changing the rules themselves; rules should be pruned or moved when they become noisy, stale, or too specific.
+- Before finalizing non-trivial changes: `python3 scripts/check-doc-drift.py` lists docs to review (advisory); `python3 scripts/suggest-rule-updates.py` writes candidates the agent must resolve autonomously.
+- After installing Rules or large structure changes: `python3 scripts/bootstrap-project-context.py` refreshes the project map, command candidates, and bootstrap report.
+- When changing the rules themselves, apply `.agent/rule-health.md`; prune or tighten noisy, stale, or over-specific rules.
 
 ## Risk Boundaries
 

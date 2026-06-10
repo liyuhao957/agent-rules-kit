@@ -1,18 +1,11 @@
 ---
 name: doc-drift
-description: Use when Claude Code changes durable project behavior or notices stale project docs. Decide whether shared docs, decisions, skills, hooks, or task protocols need updates.
+description: Use when changes may have made shared project docs stale, when deciding whether AGENTS, .agent docs, skills, hooks, or drift-map need updates, or to run and interpret the doc-drift detector.
 ---
 
 # Doc Drift
 
-Use this skill when project rules may need to change.
-
-## Workflow
-
-1. Read `.agent/doc-drift.md`.
-2. Run `python3 scripts/check-doc-drift.py` and `python3 scripts/suggest-rule-updates.py` when a git diff is available.
-3. Identify whether each candidate affects durable future-agent behavior.
-4. Update the smallest relevant shared doc when a candidate should be promoted.
-5. Mark every candidate in `.agent/rule-candidates.md` as promoted, checked-unchanged, rejected, or needs-user.
-6. Do not update docs for one-off implementation details.
-7. If stale docs are found but not fixed, mention the stale area in the final reply.
+1. Run `python3 scripts/check-doc-drift.py` (advisory: lists the shared docs mapped to changed paths).
+2. Apply `.agent/doc-drift.md` to each signal: updated, checked unchanged, out of scope, or not checked.
+3. Run `python3 scripts/suggest-rule-updates.py` and resolve `.agent/rule-candidates.md` autonomously; promote only facts verified against current code.
+4. When you adjust `.agent/drift-map.yml` globs, mirror them into `.claude/rules/*.md` frontmatter.

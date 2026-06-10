@@ -1,18 +1,11 @@
 ---
 name: quality-gate
-description: Use before finalizing non-trivial Claude Code work to check functional, logic, UI/copy, data, verification, and documentation-drift loops.
+description: Use before finalizing non-trivial work to close the affected loops, intent, functional, logic, UI/copy, data, verification, and doc drift, with real evidence.
 ---
 
 # Quality Gate
 
-Use this skill before final response on non-trivial work.
-
-## Workflow
-
-1. Read `.agent/quality-gates.md`.
-2. Read `.agent/verification-map.md`.
-3. Read `.agent/command-contract.md` when validation commands matter.
-4. Check each affected loop: intent, functional, logic, UI/copy, data, verification, drift.
-5. Run `python3 scripts/check-doc-drift.py` when a git diff is available.
-6. Run or inspect the smallest evidence that honestly supports completion.
-7. Final reply must distinguish verified, inferred, and unverified.
+1. Apply `.agent/quality-gates.md` to every affected loop.
+2. Choose evidence with `.agent/verification-map.md`; run validation commands from `.agent/command-contract.md`.
+3. Run `python3 scripts/check-doc-drift.py`, then `python3 scripts/suggest-rule-updates.py`, and resolve `.agent/rule-candidates.md`.
+4. Final reply must distinguish verified, inferred, and unverified.
