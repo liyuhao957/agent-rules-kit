@@ -66,7 +66,13 @@ To confirm the install:
 
 Validation checks **form, not correctness** — fields filled, template placeholders gone, every decision carrying a real reason. Whether the facts themselves are right is on the agent and you.
 
-**Uninstall**: delete what the installer wrote — `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, the three scripts under `scripts/` (`check-doc-drift.py`, `bootstrap-project-context.py`, `suggest-rule-updates.py`; everything else in `scripts/` is yours), and finally `.rules-kit/`. Restore anything you want from the oldest backup (later backups may contain a previous install, not your originals).
+**Uninstall**: one command, fully lossless — nothing is deleted, only moved:
+
+```bash
+/path/to/relay-rules/scripts/uninstall-rules.sh --target /path/to/project
+```
+
+It does three things: moves every kit-managed path into `.rules-kit/backups/rules-uninstall-<timestamp>/`; restores the files you had before the first install from the earliest backup; and lists every backed-up file that **carries your content** (adapted project facts, your own files inside kit directories) so you can copy back what you still need. Once satisfied, delete `.rules-kit/` yourself to finish. Add `--dry-run` to preview. (If the project is a git repo with a pre-install commit, a git rollback is always the cleanest uninstall — this script covers the other cases.)
 
 ## What it actually is
 

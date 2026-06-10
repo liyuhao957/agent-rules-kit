@@ -66,7 +66,13 @@ git clone https://github.com/liyuhao957/relay-rules.git
 
 校验查的是**形式,不是正确性**——字段填了没有、模板占位符清没清干净、每个决定有没有写真实理由。事实本身对不对,要靠 agent 和你。
 
-**卸载**:把安装时写入的文件删掉——`AGENTS.md`、`CLAUDE.md`、`.agent/`、`.agents/`、`.claude/`、`.codex/`、`scripts/` 下的三个脚本(`check-doc-drift.py`、`bootstrap-project-context.py`、`suggest-rule-updates.py`,其余文件是你自己的),最后删 `.rules-kit/`。需要恢复的内容从最早那份备份里取(较新的备份可能是上一次安装,不是你的原始文件)。
+**卸载**:一条命令,全程无损——什么都不删,只搬:
+
+```bash
+/path/to/relay-rules/scripts/uninstall-rules.sh --target /path/to/project
+```
+
+它做三件事:套件相关路径整体搬进 `.rules-kit/backups/rules-uninstall-<时间戳>/`;你装之前就有的文件从最早那份备份自动搬回原位;备份里**装有你内容的文件**(适配出来的项目事实、你自己放进套件目录的文件)逐条列出来,需要的自己取回。确认无误后,手动删掉 `.rules-kit/` 收尾。加 `--dry-run` 可以先看它打算做什么。(项目本身是 git 仓库、装前有提交的话,git 回滚永远是最干净的卸载,这个脚本是给其他情况兜底的。)
 
 ## 它到底是什么
 
