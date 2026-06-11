@@ -127,7 +127,7 @@ python3 scripts/check-doc-drift.py       # lists which docs this change may have
 python3 scripts/suggest-rule-updates.py  # writes "candidates" into the inbox (.agent/rule-candidates.md)
 ```
 
-**A candidate is a to-do note the scripts write for the agent**: "this part of the code changed; some rule may now be stale — go look, and decide." The scripts only remind, never edit; the agent works through each one, choosing from four outcomes: `promoted` (verified, written into the rules), `checked-unchanged` (looked, nothing to change), `rejected` (not worth being a rule), or `needs-user` (can't verify; left for you).
+**A candidate is a to-do note the scripts write for the agent**: "this part of the code changed; some rule may now be stale — go look, and decide." The scripts write generated sections and the inbox, but they do not decide, promote, or reject facts; the agent works through each candidate, choosing from four outcomes: `promoted` (verified, written into the rules), `checked-unchanged` (looked, nothing to change), `rejected` (not worth being a rule), or `needs-user` (can't verify; left for you).
 
 **Proportionality is what keeps it out of your way.** Only **high-risk** candidates (`risk:*`: secrets, billing, release, production) block the Stop gate; doc-drift and command candidates are surfaced but never block. Ordinary work (edit a UI file, fix a typo) doesn't touch a risk area, so finishing isn't blocked — you stop as usual. The toll you pay matches the enforcement you get.
 
@@ -137,7 +137,7 @@ The inbox is built so it can't be brushed off:
 - Committing is not resolving — unhandled high-risk candidates survive the commit.
 - Flipping a status without writing a real reason doesn't count; the next scan reverts it.
 - Handled items move to an archive at the bottom of the file — the last 30 decisions stay readable, and a rejected one won't keep coming back.
-- `.agent/rule-candidates.md` is a local working inbox; gitignore it (below) so its churn never lands in commits or a fresh clone.
+- `.agent/rule-candidates.md` is a repo-visible inbox and audit trail; strict validation expects it to exist. Commit it after candidates are handled (ideally with no current candidates), and don't leave pending items in shared history.
 - Dependency and build output (`node_modules/`, `dist/`, …) never produces candidates, and the installer resolves the ones its own files trigger — what a fresh inbox holds is only what the scan found in *your* project (detected commands, old backups), for the adaptation pass to verify.
 
 When the rules themselves start to feel noisy or stale, `.agent/rule-health.md` is the guide for pruning, merging, or deleting. This is meant to stay small, not grow into an encyclopedia.
@@ -211,12 +211,11 @@ CLAUDE.md                     thin Claude entrypoint, imports @AGENTS.md
 scripts/*.py                  bootstrap-project-context, check-doc-drift, suggest-rule-updates
 ```
 
-Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, `scripts/`. Keep `.agent/work/*` (handoff notes) and `.agent/rule-candidates.md` (the local candidate inbox the scripts rewrite on every finalize) local:
+Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, `scripts/`, including `.agent/rule-candidates.md` after candidates are handled. Keep `.agent/work/*` (handoff notes) local:
 
 ```gitignore
 .agent/work/*
 !.agent/work/README.md
-.agent/rule-candidates.md
 ```
 
 </details>
@@ -225,7 +224,7 @@ Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude
 <summary><strong>The full lifecycle: install → bootstrap scan → adapt → validate → grow</strong></summary>
 
 1. **Install** — `agent-install-rules.sh` copies the templates, generates the Codex skill tree from the canonical Claude one, records metadata in `.agent/rules-kit.json`, backs up any existing rule files, and runs the bootstrap scan. The project is now *installed*, not *adapted*: `.agent/adaptation-review.md` still says `Status: pending`.
-2. **Bootstrap scan** — `bootstrap-project-context.py` scans current files/config and writes **clues, not conclusions**: into `project-map.md`, `command-contract.md`, `bootstrap-report.md`, and `rule-candidates.md`, plus marked generated blocks in `drift-map.yml`, `.claude/rules/*.md`, and `adaptation-review.md` for the agent to tighten. After a project is marked `Status: adapted`, bootstrap leaves the drift/routing maps alone and refreshes evidence only. A file named `sync.ts` is a *signal*, not proof of verified cloud sync.
+2. **Bootstrap scan** — `bootstrap-project-context.py` scans current files/config and writes **clues, not conclusions**: into `project-map.md`, `command-contract.md`, `bootstrap-report.md`, and `rule-candidates.md`, plus marked generated blocks in `drift-map.yml`, `.claude/rules/*.md`, and `adaptation-review.md` for the agent to tighten. After a project is marked `Status: adapted`, bootstrap leaves the drift/routing maps alone, but may still refresh generated evidence, command-candidate, report, and inbox content. A file named `sync.ts` is a *signal*, not proof of verified cloud sync.
 3. **Adapt** *(agent-driven)* — following `.agent/workflows/adapt-rules.md`, the agent inspects current code, config, tests, and any old backups, writes **only verified facts** into `.agent/*`, tightens the drift-map globs to the project's real paths, and mirrors them into `.claude/rules/*`. Unprovable high-risk facts become `needs-user`.
 4. **Validate** — `validate-installed-project.sh` checks that the structure exists, `CLAUDE.md` imports `@AGENTS.md`, the Codex skill tree matches the canonical one, scripts are executable, and (with the strict flags) that adaptation status, placeholders, and candidates are all handled. Form, not correctness.
 5. **Grow** *(agent-driven)* — as code changes, the two scan scripts surface possibly stale docs and new candidates; the agent verifies, confirms unchanged, rejects, or marks `needs-user`.
