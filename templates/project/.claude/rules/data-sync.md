@@ -1,6 +1,7 @@
 ---
 paths:
   - "db/**"
+  - "**/db/**"
   - "prisma/**"
   - "drizzle/**"
   - "supabase/migrations/**"
@@ -10,8 +11,18 @@ paths:
   - "**/Schema/**"
   - "**/migrations/**"
   - "**/Migrations/**"
+  - "**/migrate/**"
   - "**/stores/**"
   - "**/Stores/**"
+  - "**/store/**"
+  - "**/Store/**"
+  - "**/repository/**"
+  - "**/repositories/**"
+  - "**/Repository/**"
+  - "**/Repositories/**"
+  - "**/dao/**"
+  - "**/*_repo.go"
+  - "**/*Repository.*"
   - "**/*.sql"
   - "**/*.xcdatamodeld/**"
 ---

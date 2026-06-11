@@ -376,7 +376,10 @@ def top_dirs(values: list[str], max_items: int = 8) -> list[str]:
         parts = Path(value).parts
         if not parts:
             continue
-        parent_parts = parts[:-1] if Path(value).suffix else parts
+        # Values are file paths, so the directory is always everything but the
+        # last component. (Using suffix to decide turned extension-less files
+        # like Dockerfile/Makefile into dead `Dockerfile/**` globs.)
+        parent_parts = parts[:-1]
         if len(parent_parts) >= 2:
             candidate = f"{parent_parts[0]}/{parent_parts[1]}/**"
         elif len(parent_parts) == 1:

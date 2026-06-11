@@ -77,22 +77,48 @@ def nontrivial_files(files: set[str]) -> list[str]:
     return kept
 
 
-def pending_ids(path: Path) -> list[str]:
+def pending_candidates(path: Path) -> tuple[list[str], list[str]]:
+    """Split pending candidates into (blocking, advisory).
+
+    Only high-stakes `risk:*` candidates (secrets / billing / release / prod)
+    block the Stop gate. Drift and command candidates are advisory: surfaced,
+    never gated, so ordinary work is not taxed every session.
+    """
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
-        return []
-    ids: list[str] = []
+        return [], []
+    blocking: list[str] = []
+    advisory: list[str] = []
     current_id: str | None = None
+    current_kind = ""
+    current_status = ""
+
+    def flush() -> None:
+        nonlocal current_id, current_kind, current_status
+        if current_id and current_status == "pending":
+            if current_kind == "risk" or current_id.startswith("risk:"):
+                blocking.append(current_id)
+            else:
+                advisory.append(current_id)
+        current_id, current_kind, current_status = None, "", ""
+
     for raw in text.splitlines():
-        id_match = re.match(r"^###\s+([A-Za-z0-9_.:@+-]+)\s*$", raw.strip())
+        stripped = raw.strip()
+        id_match = re.match(r"^###\s+([A-Za-z0-9_.:@+-]+)\s*$", stripped)
         if id_match:
+            flush()
             current_id = id_match.group(1)
             continue
-        if current_id and re.match(r"^Status:\s*pending\s*$", raw.strip()):
-            ids.append(current_id)
-            current_id = None
-    return ids
+        if current_id:
+            kind_match = re.match(r"^Kind:\s*(\S+)\s*$", stripped)
+            if kind_match:
+                current_kind = kind_match.group(1)
+            status_match = re.match(r"^Status:\s*(\S+)\s*$", stripped)
+            if status_match:
+                current_status = status_match.group(1)
+    flush()
+    return blocking, advisory
 
 
 def main() -> int:
@@ -120,26 +146,33 @@ def main() -> int:
         subprocess.run(["python3", str(suggest), "--quiet"], check=False)
 
     candidates_path = agent_dir / "rule-candidates.md"
-    ids = pending_ids(candidates_path)
-    if not ids:
+    blocking, advisory = pending_candidates(candidates_path)
+
+    if not blocking:
+        # No high-stakes candidate. Surface advisory items in one line and let
+        # the session end — ordinary drift never blocks.
+        if advisory:
+            print(
+                f"Advisory: {len(advisory)} rule candidate(s) noted in .agent/rule-candidates.md "
+                "(not blocking). Review when convenient: python3 scripts/suggest-rule-updates.py --check"
+            )
         return 0
 
-    if nontrivial:
-        print(f"Rules hook blocked finalization: {len(ids)} pending rule candidate(s).", file=sys.stderr)
-    else:
-        print(
-            f"Rules hook blocked finalization: {len(ids)} pending rule candidate(s) remain in "
-            ".agent/rule-candidates.md from earlier (possibly committed) work. Committing does not resolve them.",
-            file=sys.stderr,
-        )
-    for cid in ids[:MAX_LISTED_PENDING]:
-        print(f"  - {cid}", file=sys.stderr)
-    if len(ids) > MAX_LISTED_PENDING:
-        print(f"  - ... {len(ids) - MAX_LISTED_PENDING} more", file=sys.stderr)
     print(
-        "Resolve before finishing: open .agent/rule-candidates.md and mark each "
-        "candidate promoted, checked-unchanged, rejected, or needs-user, with a real "
-        "decision note. Re-check with: python3 scripts/suggest-rule-updates.py --quiet --check",
+        f"Rules hook blocked finalization: {len(blocking)} pending high-risk rule candidate(s) "
+        "(secrets/billing/release/prod). Committing does not resolve them.",
+        file=sys.stderr,
+    )
+    for cid in blocking[:MAX_LISTED_PENDING]:
+        print(f"  - {cid}", file=sys.stderr)
+    if len(blocking) > MAX_LISTED_PENDING:
+        print(f"  - ... {len(blocking) - MAX_LISTED_PENDING} more", file=sys.stderr)
+    if advisory:
+        print(f"  (+{len(advisory)} advisory candidate(s), not blocking)", file=sys.stderr)
+    print(
+        "Resolve each high-risk candidate in .agent/rule-candidates.md as promoted, "
+        "checked-unchanged, rejected, or needs-user, with a real decision note. "
+        "Re-check with: python3 scripts/suggest-rule-updates.py --quiet --check --gate",
         file=sys.stderr,
     )
     print(

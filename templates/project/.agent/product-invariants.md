@@ -1,6 +1,6 @@
 # Product Invariants
 
-Replace this template with durable product principles that should survive implementation changes.
+Replace this template with durable product principles, verified from current code, that should survive implementation changes. If you cannot verify any yet, replace this line with `needs-user: <what is unverified>` and note it in `.agent/adaptation-review.md` — do not leave this template text in place.
 
 Keep this file small. Do not record every feature or current file path here.
 

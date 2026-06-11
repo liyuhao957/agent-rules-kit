@@ -17,8 +17,8 @@ Resolution protocol (statuses, real-notes requirement, archive): `.agent/index.m
 
 - `check-doc-drift.py` reads `.agent/drift-map.yml` against current git changes and lists the shared docs mapped to your diff. The same globs drive on-demand loading (`.claude/rules/*.md` for Claude, the Codex PostToolUse router); when you change globs in the map, mirror them into `.claude/rules/*.md` frontmatter.
 - After adaptation, the checker warns when a literal drift-map glob matches no repo file — the signal that the map went stale after a rename. Renames also fire the old path's rule once (`--no-renames`).
-- Candidate ids are `<id>@<evidence-key>`; new evidence for the same rule resets the candidate to pending, with no status inheritance.
-- Pending candidates are never dropped by regeneration; they carry forward until resolved. Committing does not clear them, and the Stop gate blocks on committed-but-pending items too.
+- Candidate ids are stable per rule (`risk:billing`, `drift:ui-copy`) — one candidate no matter how many files match. Each block records an `EvidenceKey`; a resolved candidate reopens only when its rule fires on genuinely new evidence (the key changes), with no stale status inheritance.
+- Only high-risk (`risk:*`) candidates block the Stop gate; drift and command candidates are advisory. Pending candidates are never dropped by regeneration; high-risk ones carry forward until resolved, and committing does not clear them.
 - Resolved candidates move to a compact archive section in `.agent/rule-candidates.md` (the audit trail); rejected items stay suppressed. A status flipped to resolved without a real decision note reverts to pending on the next scan.
 - Edits touching only `.agent/*` docs are auto-classified `checked-unchanged` ("rule-doc maintenance"), so promotions do not spawn review-the-review rounds.
 - Vendor dirs (`node_modules`, `dist`, ...) never produce candidates.
@@ -44,4 +44,4 @@ If stale docs affected the task, fix them when in scope. If not in scope, mentio
 
 ## Final Reply Expectation
 
-For each drift signal say one of: updated, checked unchanged, out of scope, or not checked (with why). Do not leave `.agent/rule-candidates.md` with `Status: pending` for ordinary completed work.
+For each drift signal say one of: updated, checked unchanged, out of scope, or not checked (with why). Resolve any pending high-risk (`risk:*`) candidate before finishing; drift/command candidates are advisory.

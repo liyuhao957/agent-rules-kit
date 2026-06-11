@@ -59,7 +59,19 @@ VENDOR_SEGMENTS = {
 
 ARCHIVE_BEGIN = "# BEGIN RESOLVED CANDIDATE ARCHIVE"
 ARCHIVE_END = "# END RESOLVED CANDIDATE ARCHIVE"
+GENERATED_BEGIN = "# BEGIN GENERATED RULE CANDIDATES"
+GENERATED_END = "# END GENERATED RULE CANDIDATES"
 MAX_ARCHIVE = 30
+
+# A candidate id always starts with one of these. Only `### <id>` headings with
+# a known prefix, inside the generated block, are candidates — so a Markdown
+# heading a human writes in a decision note (e.g. `### TODO`) is never parsed as
+# a phantom candidate.
+KNOWN_PREFIXES = ("drift:", "command:", "backup:", "risk:")
+
+
+def is_candidate_id(value: str) -> bool:
+    return value.startswith(KNOWN_PREFIXES)
 
 # Fallback when .agent/rules-kit.json predates the managedPaths field.
 DEFAULT_MANAGED_PATHS = [
@@ -181,28 +193,39 @@ def evidence_key(evidence: list[str]) -> str:
 
 
 ID_PATTERN = re.compile(r"^###\s+([A-Za-z0-9_.:@+-]+)\s*$")
-ARCHIVE_LINE = re.compile(r"^-\s+(?P<id>[A-Za-z0-9_.:@+-]+)\s+\|\s+(?P<status>[a-z-]+)\s+\|\s+(?P<date>\S+)\s+\|\s+(?P<note>.*)$")
+ARCHIVE_LINE = re.compile(
+    r"^-\s+(?P<id>[A-Za-z0-9_.:@+-]+)\s+\|\s+(?P<status>[a-z-]+)\s+\|\s+(?P<date>\S+)\s+\|\s+(?P<key>\S*)\s+\|\s+(?P<note>.*)$"
+)
 
 
 def parse_blocks(path: Path) -> dict[str, dict[str, object]]:
-    """Parse full candidate blocks from the generated section."""
+    """Parse candidate blocks from the generated section only.
+
+    Headers are recognized only inside the generated block and only when the id
+    has a known candidate prefix, so a `### ...` heading written inside a human
+    decision note is never mistaken for a new candidate.
+    """
     blocks: dict[str, dict[str, object]] = {}
     text = read_text(path)
     current_id: str | None = None
     raw_lines: list[str] = []
-    in_archive = False
+    in_generated = False
 
     def flush() -> None:
         nonlocal current_id, raw_lines
         if current_id is None:
             return
         status = "pending"
+        evidence_key = ""
         notes: list[str] = []
         in_notes = False
         for line in raw_lines:
             status_match = re.match(r"^Status:\s*([A-Za-z-]+)\s*$", line.strip())
             if status_match and status_match.group(1) in ALLOWED_STATUSES:
                 status = status_match.group(1)
+            key_match = re.match(r"^EvidenceKey:\s*(\S+)\s*$", line.strip())
+            if key_match:
+                evidence_key = key_match.group(1)
             if line.strip() == "Decision notes:":
                 in_notes = True
                 continue
@@ -211,28 +234,34 @@ def parse_blocks(path: Path) -> dict[str, dict[str, object]]:
                     in_notes = False
                 else:
                     notes.append(line)
-        blocks[current_id] = {"status": status, "notes": notes, "raw": list(raw_lines)}
+        blocks[current_id] = {
+            "status": status,
+            "notes": notes,
+            "raw": list(raw_lines),
+            "evidence_key": evidence_key,
+        }
         current_id = None
         raw_lines = []
 
     for raw in text.splitlines():
-        if raw.strip() == ARCHIVE_BEGIN:
-            in_archive = True
-        elif raw.strip() == ARCHIVE_END:
-            in_archive = False
-        if in_archive:
+        stripped = raw.strip()
+        if stripped == GENERATED_BEGIN:
+            in_generated = True
             continue
-        id_match = ID_PATTERN.match(raw.strip())
-        if id_match:
+        if stripped == GENERATED_END:
+            flush()
+            in_generated = False
+            continue
+        if not in_generated:
+            continue
+        id_match = ID_PATTERN.match(stripped)
+        if id_match and is_candidate_id(id_match.group(1)):
             flush()
             current_id = id_match.group(1)
             raw_lines = [raw]
             continue
         if current_id is not None:
-            if raw.startswith("# END GENERATED"):
-                flush()
-            else:
-                raw_lines.append(raw)
+            raw_lines.append(raw)
     flush()
     return blocks
 
@@ -255,6 +284,7 @@ def parse_archive(path: Path) -> list[dict[str, str]]:
                     "id": line_match.group("id"),
                     "status": line_match.group("status"),
                     "date": line_match.group("date"),
+                    "key": line_match.group("key"),
                     "note": line_match.group("note").strip(),
                 }
             )
@@ -496,8 +526,11 @@ def all_candidates(files: list[str]) -> list[dict[str, object]]:
     candidates: list[dict[str, object]] = []
     for group in (drift_candidates(files), command_candidates(), backup_candidates(), risk_candidates(files)):
         for candidate in group:
+            # The id is stable per rule (e.g. `risk:billing`). The evidence
+            # fingerprint is a field, not part of the id, so a rule fires ONE
+            # candidate no matter how many files it matches over a task.
             candidate["key"] = evidence_key([str(e) for e in candidate["evidence"]])  # type: ignore[arg-type]
-            candidate["full_id"] = f"{candidate['id']}@{candidate['key']}"
+            candidate["full_id"] = str(candidate["id"])
             fid = str(candidate["full_id"])
             if fid in seen:
                 continue
@@ -527,6 +560,7 @@ def render_block(candidate: dict[str, object], status: str, notes: list[str]) ->
         f"### {candidate['full_id']}",
         f"Status: {status}",
         f"Kind: {candidate.get('kind', 'unknown')}",
+        f"EvidenceKey: {candidate.get('key', '')}",
         f"Title: {candidate.get('title', '')}",
         f"Reason: {candidate.get('reason', '')}",
         "Evidence:",
@@ -556,7 +590,7 @@ HEADER = [
     "- `checked-unchanged`: reviewed evidence and existing rules still cover it.",
     "- `rejected`: not durable, too specific, obvious from code, or not useful as a rule.",
     "- `needs-user`: high-risk fact cannot be proven from repo/tool evidence. Record the uncertainty; do not ask the user unless the current task depends on it.",
-    "- `pending`: not yet handled. Do not finalize non-trivial work with pending candidates.",
+    "- `pending`: not yet handled. Pending high-risk (`risk:*`) candidates block finalization; drift and command candidates are advisory and do not block.",
     "",
     "A decision requires a real note: statuses flipped without decision notes revert to pending on the next scan. Resolved items move to the archive section below and stay resolved.",
     "",
@@ -569,6 +603,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Generate or validate rule update candidates.")
     parser.add_argument("--base", help="Optional git base ref to compare against.")
     parser.add_argument("--check", action="store_true", help="Fail if pending candidates remain.")
+    parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="With --check, fail only on pending high-risk (risk:*) candidates; advisory drift/command candidates do not fail.",
+    )
     parser.add_argument("--quiet", action="store_true", help="Reduce output.")
     parser.add_argument(
         "--resolve-kit-install",
@@ -590,21 +629,32 @@ def main() -> int:
     pending_sections: list[list[str]] = []
     new_archive: list[dict[str, str]] = []
     generated_ids: set[str] = set()
+    pending_risk = 0  # high-stakes candidates that gate the Stop hook
 
     for candidate in candidates:
         fid = str(candidate["full_id"])
+        cur_key = str(candidate.get("key", ""))
         generated_ids.add(fid)
-        prev = blocks.get(fid) or blocks.get(str(candidate["id"]))  # legacy entries have no @key
+        prev = blocks.get(fid)
         status = str(candidate.get("default_status", "pending"))
         notes: list[str] = []
         auto_note = str(candidate.get("auto_note", ""))
         if prev:
             status = str(prev["status"])
             notes = list(prev["notes"])  # type: ignore[arg-type]
+            # Reopen a resolved candidate only when the rule fired on genuinely
+            # new evidence (fingerprint changed), not on every scan.
+            if status != "pending" and prev.get("evidence_key") and prev["evidence_key"] != cur_key:
+                status = "pending"
+                notes = []
         elif fid in archived_status:
             entry = archived_status[fid]
-            status = entry["status"]
-            notes = [f"- {entry['note']}"] if entry["note"] else []
+            if entry.get("key") and entry["key"] != cur_key:
+                status = "pending"
+                notes = []
+            else:
+                status = entry["status"]
+                notes = [f"- {entry['note']}"] if entry["note"] else []
         if (
             args.resolve_kit_install
             and status == "pending"
@@ -624,31 +674,57 @@ def main() -> int:
                 status = "pending"
         if status == "pending":
             pending_sections.append(render_block(candidate, status, notes))
+            if candidate.get("kind") == "risk":
+                pending_risk += 1
         else:
             first_note = next((line.strip().lstrip("-").strip() for line in notes if line.strip()), "")
-            new_archive.append({"id": fid, "status": status, "date": today, "note": first_note})
+            new_archive.append({"id": fid, "status": status, "date": today, "key": cur_key, "note": first_note})
+
+    def carry(raw: list[str]) -> list[str]:
+        # Strip trailing blank lines, then append exactly one separator, so a
+        # carried block is byte-stable across no-op re-runs (no growing diff).
+        trimmed = list(raw)
+        while trimmed and not trimmed[-1].strip():
+            trimmed.pop()
+        return trimmed + [""]
 
     # Carry forward previously pending candidates whose files left the diff;
-    # they stay in the inbox verbatim until an agent resolves them.
+    # they stay in the inbox until an agent resolves them.
     carried = 0
     for fid, block in blocks.items():
         if fid in generated_ids:
             continue
         if block["status"] == "pending":
-            pending_sections.append(list(block["raw"]) + [""])
+            pending_sections.append(carry(block["raw"]))  # type: ignore[arg-type]
             carried += 1
+            if fid.startswith("risk:") or any(
+                line.strip() == "Kind: risk" for line in block["raw"]  # type: ignore[union-attr]
+            ):
+                pending_risk += 1
         else:
             notes = list(block["notes"])  # type: ignore[arg-type]
             if not meaningful_notes(notes):
                 # Resolved without a note and no longer reproducible from the
                 # diff: keep it in the inbox rather than blessing the flip.
                 pending_sections.append(
-                    [re.sub(r"^Status:.*$", "Status: pending", line) for line in block["raw"]] + [""]
+                    carry([re.sub(r"^Status:.*$", "Status: pending", line) for line in block["raw"]])
                 )
                 carried += 1
+                if fid.startswith("risk:") or any(
+                    line.strip() == "Kind: risk" for line in block["raw"]  # type: ignore[union-attr]
+                ):
+                    pending_risk += 1
                 continue
             first_note = next((line.strip().lstrip("-").strip() for line in notes if line.strip()), "")
-            new_archive.append({"id": fid, "status": str(block["status"]), "date": today, "note": first_note})
+            new_archive.append(
+                {
+                    "id": fid,
+                    "status": str(block["status"]),
+                    "date": today,
+                    "key": str(block.get("evidence_key", "")),
+                    "note": first_note,
+                }
+            )
 
     # Merge archives: newly resolved first, then prior entries, dedupe by id.
     seen_archive: set[str] = set()
@@ -663,7 +739,7 @@ def main() -> int:
     pending = len(pending_sections)
 
     body: list[str] = []
-    body.append("# BEGIN GENERATED RULE CANDIDATES")
+    body.append(GENERATED_BEGIN)
     body.append("Generated: {timestamp}")
     body.append("")
     if not pending_sections:
@@ -671,13 +747,15 @@ def main() -> int:
         body.append("")
     for section in pending_sections:
         body.extend(section)
-    body.append("# END GENERATED RULE CANDIDATES")
+    body.append(GENERATED_END)
     body.append("")
     body.append(ARCHIVE_BEGIN)
     if not merged_archive:
         body.append("- no resolved candidates yet")
     for entry in merged_archive:
-        body.append(f"- {entry['id']} | {entry['status']} | {entry['date']} | {entry['note']}")
+        body.append(
+            f"- {entry['id']} | {entry['status']} | {entry['date']} | {entry.get('key', '')} | {entry['note']}"
+        )
     body.append(ARCHIVE_END)
 
     content_template = "\n".join(HEADER + body).rstrip() + "\n"
@@ -695,14 +773,18 @@ def main() -> int:
         path.write_text(final_text, encoding="utf-8")
 
     if not args.quiet:
+        risk_note = f" ({pending_risk} high-risk)" if pending_risk else ""
         print(
             f"Rule candidates: {len(candidates)} generated, {carried} carried forward, "
-            f"{pending} pending, {len(merged_archive)} archived."
+            f"{pending} pending{risk_note}, {len(merged_archive)} archived."
         )
         if pending:
             print("Review .agent/rule-candidates.md and mark each candidate promoted, checked-unchanged, rejected, or needs-user.")
-    if args.check and pending:
-        return 1
+    if args.check:
+        if args.gate:
+            # Stop-gate scope: only high-stakes candidates block.
+            return 1 if pending_risk else 0
+        return 1 if pending else 0
     return 0
 
 

@@ -8,7 +8,7 @@ Rules must not grow by blindly copying scanner output into durable docs. The age
 - `checked-unchanged`: reviewed evidence and existing rules still cover it.
 - `rejected`: not durable, too specific, obvious from code, or not useful as a rule.
 - `needs-user`: high-risk fact cannot be proven from repo/tool evidence. Record the uncertainty; do not ask the user unless the current task depends on it.
-- `pending`: not yet handled. Do not finalize non-trivial work with pending candidates.
+- `pending`: not yet handled. Pending high-risk (`risk:*`) candidates block finalization; drift and command candidates are advisory and do not block.
 
 Agent rule: decide autonomously whenever current evidence is enough. Do not ask the user to classify ordinary candidates.
 

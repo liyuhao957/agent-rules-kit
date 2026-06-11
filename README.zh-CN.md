@@ -91,7 +91,7 @@ git clone https://github.com/liyuhao957/relay-rules.git
 - `.agent/`——一组短小的 Markdown：产品承诺、用户路径、验证过的命令、各领域的规矩，以及一张「什么任务读哪份文档」的索引。大多一开始是模板，由 agent 照你的真实代码填。
 - `.claude/rules/`——一组小指针文件：Claude 一读到匹配的文件，对应领域的文档就自动加载。
 - `.claude/skills/`——薄薄的工作流入口；Codex 那份 `.agents/skills/` 在安装时由它生成，两边永远一致。
-- 两边各一套钩子——bash 守卫拦危险命令；收尾门禁管收工，收件箱里还有没处理的「候选」（下文讲）就不让结束。Codex 还多一个路由钩子，编辑后补送领域指针。
+- 两边各一套钩子——bash 守卫拦危险命令；收尾门禁只在收件箱里还有没处理的**高风险**候选（密钥、计费、发布、生产）时才不让结束，普通的文档漂移候选只提示不拦（下文讲）。Codex 还多一个路由钩子，编辑后补送领域指针。
 - 三个小 Python 脚本（只用标准库、零依赖），扫描仓库、写出建议——只写进收件箱和标记清楚的生成区块，从不覆盖你或 agent 写的内容。
 
 分工是关键：**agent 是裁判，脚本只收集证据、标出哪里可能过时了。** 这里没有任何东西会自己做决定。
@@ -129,12 +129,15 @@ python3 scripts/suggest-rule-updates.py  # 往收件箱（.agent/rule-candidates
 
 **「候选」就是脚本写给 agent 的待办便条**：「代码这里变了，某条规则可能跟着过时了，去看一眼，做个决定。」脚本只提醒、从不直接改；agent 逐条处理，四选一：`promoted`（查实了，写进规则）、`checked-unchanged`（看过了，不用改）、`rejected`（不值得成为规则）、`needs-user`（查不了，留给你确认）。
 
+**比例原则——这是它不打扰日常的关键。** 只有**高风险**候选（`risk:*`：密钥、计费、发布、生产）会拦收尾；文档漂移和命令候选只提示、不拦。普通改动（改个 UI 文件、修个 typo）不碰高风险区，收尾就不会被拦，你照常停。这样收的「税」配得上它真正的强制力。
+
 这个收件箱专门防糊弄：
 
-- 每条候选跟触发它的那批文件绑定（`drift:ui-copy@a1b2c3d` 里的 `@a1b2c3d` 后缀）。同一条规则之后碰到**新文件**，会生成新的待办，不会沿用上周的结论。
-- 提交不等于解决——没处理的候选不会因为代码提交了就消失，收尾门禁照样拦。
+- **一条规则一个候选**——id 是稳定的（`risk:billing`、`drift:ui-copy`），不再按「变更文件集合」生成。一次任务里逐个改 6 个文件，还是一个候选，不会滚成 7 个。只有当这条规则碰到**真正的新证据**（块内 `EvidenceKey` 变了）时，已解决的候选才重新打开。
+- 提交不等于解决——没处理的高风险候选不会因为代码提交了就消失。
 - 只改状态、不写真实理由，不算数；下次扫描自动打回待办。
 - 处理完的挪到文件底部的归档区——历史一直可查，拒过的不会反复纠缠。
+- `.agent/rule-candidates.md` 是本地工作收件箱，建议加进 `.gitignore`（见下文），它的频繁改写就不会进提交、也不会污染别人 clone 出来的仓库。
 - 依赖和构建产物（`node_modules/`、`dist/` 等）永远不产生候选；安装自身触发的候选由安装器直接处理掉——新装后收件箱里剩下的，只有扫描在*你的*项目里找到的东西（检测到的命令、旧备份），留给适配流程逐条核实。
 
 当规则本身开始变得啰嗦或过时，`.agent/rule-health.md` 是修剪、合并、删除的指南。这套规则的本意是保持小巧，不是长成百科全书。
@@ -146,20 +149,20 @@ python3 scripts/suggest-rule-updates.py  # 往收件箱（.agent/rule-candidates
 | 机制 | 触发条件 | 拦截？ |
 | --- | --- | --- |
 | bash 守卫（PreToolUse，两边都有） | force push；`git reset --hard`；`rm -rf`（`node_modules`、`dist` 这类可随时重建的目录除外）；发布/部署类命令（release、deploy、publish、submit，包括 `npx vercel deploy`、`sh -c "npm publish"` 这类包装写法）；改动生产环境状态的命令；通过真实数据库 CLI（`psql`、`mysql`）执行的破坏性 SQL | **拦** —— exit 2；旁路 `RULES_HOOK_ALLOW_RISK=1` |
-| 收尾门禁（Stop，两边都有） | 收件箱里还有没处理的候选——无论来自当前 diff，还是早前已随代码提交 | **拦** —— 列出待办 ID 和复查命令；Stop 拦截的语义是「接着做完」，不是「停机」；旁路 `RULES_HOOK_ALLOW_PENDING=1` |
+| 收尾门禁（Stop，两边都有） | 收件箱里还有没处理的**高风险**候选（`risk:*`：密钥、计费、发布、生产）；普通的 drift/command 候选只列出、不拦 | **拦** —— 列出高风险待办 ID 和复查命令；Stop 拦截的语义是「接着做完」，不是「停机」；旁路 `RULES_HOOK_ALLOW_PENDING=1` |
 | 文档漂移报告 | 按需运行；收尾门禁因当前改动拦截时也会一并给出 | 不拦 —— 仅列出待复查文档 |
 | 映射表自检 | 适配后，drift-map 里某条路径在仓库中匹配不到任何文件——通常意味着目录被改名 | 不拦 —— 一行警告，提示映射表本身过时了 |
 | 领域路由（PostToolUse，仅 Codex） | 首次编辑触及某个映射区域 | 不拦 —— 一行指针 |
 | 其余一切——质量闭环、事实优先级、工作流 | 文字约定 | 不拦 —— 靠 agent 判断，这是设计如此 |
 
-也就是说，真正会拦的只有两道：窄范围的 bash 守卫，和收尾门禁。「别信过时文档」「把活做完整」靠的是 agent 守约定——这套规则让正确的时机更容易被抓住，但它不证明正确性。收尾门禁带防循环开关（`stop_hook_active`），不会无限拦下去。
+也就是说，真正会拦的只有两道，而且都很窄：bash 守卫（一小撮高风险命令），和收尾门禁（只拦高风险候选）。「别信过时文档」「把活做完整」靠的是 agent 守约定——这套规则让正确的时机更容易被抓住，但它不证明正确性。收尾门禁带防循环开关（`stop_hook_active`），不会无限拦下去。bash 守卫的设计是「拦不准时宁可拦」（fail closed）：输入解析不了就拦，不会因为崩溃而静默放行。
 
 ## token 账
 
 规则要是把上下文塞满了，就帮了倒忙。所以：
 
 - **常驻的只有一份约 35 行的 `AGENTS.md`**，固定成本就这一项。
-- 领域文档**碰到对应文件才加载**——Claude 靠读到匹配文件时自动加载的小指针，Codex 靠编辑后钩子注入的同一条指针（每个区域每次会话只提示一次）。
+- 领域文档**碰到对应文件才加载**——最可靠的入口是手维护的 `.agent/index.md` 路由表，加上编辑后 `python3 scripts/check-doc-drift.py` 机械列出「这次 diff 对应哪几份文档」。Claude 的 `.claude/rules/` 路径指针和 Codex 的编辑后路由钩子是在此之上的加成；但 `.claude/rules/` 的按文件自动加载在部分 Claude Code 版本上有已知上游 bug（要么全局灌、要么不触发），所以别把它当唯一依靠。
 - 技能**被调用才展开**；收尾时脚本机械地列出「这次 diff 对应哪几份文档」，agent 照单取用，不用整个目录都读。
 
 一个普通任务的开销 = 约定本身 + 实际碰到的领域 + 一段任务结束时的固定检查（一两千 token，与任务大小无关）。匹配按词边界算：`ProductCard.tsx` 不会因为带着 "prod" 就触发盯生产环境的规则。
@@ -208,11 +211,12 @@ CLAUDE.md                     极薄的 Claude 入口，导入 @AGENTS.md
 scripts/*.py                  bootstrap-project-context、check-doc-drift、suggest-rule-updates
 ```
 
-建议提交进 git：`AGENTS.md`、`CLAUDE.md`、`.agent/`、`.agents/`、`.claude/`、`.codex/`、`scripts/`。`.agent/work/*`（交接记录）保持本地，除非你有意共享：
+建议提交进 git：`AGENTS.md`、`CLAUDE.md`、`.agent/`、`.agents/`、`.claude/`、`.codex/`、`scripts/`。`.agent/work/*`（交接记录）和 `.agent/rule-candidates.md`（本地候选收件箱，脚本每次收尾都改写）保持本地：
 
 ```gitignore
 .agent/work/*
 !.agent/work/README.md
+.agent/rule-candidates.md
 ```
 
 </details>

@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="${1:-templates/project}"
+# --installed relaxes the fixed domain/pointer lists: an adapted project may
+# prune domains it does not use (a CLI has no ui-copy/localization), so we
+# validate whatever domains and pointers exist for consistency instead of
+# requiring the full consumer-app set. The kit's own template (no flag) stays
+# strict so it always ships every domain.
+root=""
+installed=0
+for arg in "$@"; do
+  case "$arg" in
+    --installed) installed=1 ;;
+    *) root="$arg" ;;
+  esac
+done
+root="${root:-templates/project}"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -50,9 +63,17 @@ for workflow in adapt-rules implement review continue release; do
   need_file ".agent/workflows/$workflow.md"
 done
 
-for domain in ui-copy build-test data-sync localization performance release; do
-  need_file ".agent/domains/$domain.md"
-done
+if [ "$installed" -eq 1 ]; then
+  # Adapted project: at least one domain doc must remain, but the project may
+  # have pruned domains it does not use.
+  if ! ls "$root"/.agent/domains/*.md >/dev/null 2>&1; then
+    fail ".agent/domains/ has no domain docs"
+  fi
+else
+  for domain in ui-copy build-test data-sync localization performance release; do
+    need_file ".agent/domains/$domain.md"
+  done
+fi
 
 # .claude/skills is the canonical skill tree. .agents/skills (Codex) is
 # generated at install time; when present (installed projects) it must be
@@ -67,13 +88,29 @@ if [ -d "$root/.agents/skills" ]; then
 fi
 
 # Path-scoped pointer rules: Claude's on-demand loading of domain docs.
-for rule in ui-copy data-sync build-test localization release performance rules-kit; do
-  need_file ".claude/rules/$rule.md"
-  need_contains ".claude/rules/$rule.md" "paths:"
-done
-for rule in ui-copy data-sync build-test localization release performance; do
-  need_contains ".claude/rules/$rule.md" ".agent/domains/"
-done
+need_file ".claude/rules/rules-kit.md"
+need_contains ".claude/rules/rules-kit.md" "paths:"
+if [ "$installed" -eq 1 ]; then
+  # Validate whatever pointers exist: each must declare paths:, and any domain
+  # doc it references must still exist (so a pruned domain leaves no dangling
+  # pointer). A pointer may reference non-domain docs (e.g. docs.md), so the
+  # check is by reference, not by name.
+  for pointer in "$root"/.claude/rules/*.md; do
+    name="$(basename "$pointer" .md)"
+    [ "$name" = "rules-kit" ] && continue
+    need_contains ".claude/rules/$name.md" "paths:"
+    while IFS= read -r ref; do
+      [ -n "$ref" ] || continue
+      [ -f "$root/$ref" ] || fail ".claude/rules/$name.md references missing $ref (prune the pointer and its doc together)"
+    done < <(grep -oE '\.agent/domains/[A-Za-z0-9_-]+\.md' "$pointer" | sort -u)
+  done
+else
+  for rule in ui-copy data-sync build-test localization release performance; do
+    need_file ".claude/rules/$rule.md"
+    need_contains ".claude/rules/$rule.md" "paths:"
+    need_contains ".claude/rules/$rule.md" ".agent/domains/"
+  done
+fi
 
 need_dir ".claude/agents"
 need_file ".codex/hooks.example.json"

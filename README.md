@@ -89,9 +89,9 @@ Not a framework, not an engine, no runtime — just files:
 
 - `AGENTS.md` — the shared agreement, ~35 lines. Codex loads it natively at startup; Claude Code imports it through a thin `CLAUDE.md` that does `@AGENTS.md` (the officially documented bridge).
 - `.agent/` — short markdown docs: product promises, user journeys, verified commands, per-domain rules, and an index of which doc to read for which task. Most start as templates the agent fills in from your real code.
-- `.claude/rules/` — tiny pointer files: the moment Claude reads a matching file, the right domain doc auto-loads.
-- `.claude/skills/` — thin workflow entries; the Codex tree under `.agents/skills/` is generated from it at install time, so the two sides can never diverge.
-- Hooks for both tools — a bash guard that blocks dangerous commands, and a Stop gate that blocks finishing while the inbox still holds unhandled "candidates" (explained below). Codex additionally gets a domain router that delivers the same pointers after edits.
+- `.claude/rules/` — tiny pointer files that map paths to domain docs. The reliable on-demand entry is the hand-kept `.agent/index.md` plus `check-doc-drift.py`; these pointers and the Codex router are a bonus on top (see the token note for the caveat).
+- `.claude/skills/` — thin workflow entries; the Codex tree under `.agents/skills/` is generated from it at install time, so the two sides stay in step.
+- Hooks for both tools — a bash guard that blocks dangerous commands, and a Stop gate that blocks finishing only while the inbox holds unhandled **high-risk** candidates (secrets, billing, release, production); ordinary doc-drift candidates are advisory and never block (explained below). Codex additionally gets a domain router that delivers the same pointers after edits.
 - Three small Python scripts (standard library only, zero dependencies) that scan the repo and write suggestions — into the inbox and clearly marked generated blocks, never over what you or the agent wrote.
 
 The division of labor is the whole point: **the agent is the judge; the scripts only collect evidence and flag what might be stale.** Nothing in here decides anything on its own.
@@ -129,12 +129,15 @@ python3 scripts/suggest-rule-updates.py  # writes "candidates" into the inbox (.
 
 **A candidate is a to-do note the scripts write for the agent**: "this part of the code changed; some rule may now be stale — go look, and decide." The scripts only remind, never edit; the agent works through each one, choosing from four outcomes: `promoted` (verified, written into the rules), `checked-unchanged` (looked, nothing to change), `rejected` (not worth being a rule), or `needs-user` (can't verify; left for you).
 
+**Proportionality is what keeps it out of your way.** Only **high-risk** candidates (`risk:*`: secrets, billing, release, production) block the Stop gate; doc-drift and command candidates are surfaced but never block. Ordinary work (edit a UI file, fix a typo) doesn't touch a risk area, so finishing isn't blocked — you stop as usual. The toll you pay matches the enforcement you get.
+
 The inbox is built so it can't be brushed off:
 
-- Every candidate is tied to the exact files that triggered it (the `@a1b2c3d` suffix in `drift:ui-copy@a1b2c3d`). The same rule firing on **new** files later creates a fresh to-do instead of reusing last week's verdict.
-- Committing is not resolving — unhandled candidates survive the commit, and the Stop gate still blocks.
+- **One candidate per rule** — the id is stable (`risk:billing`, `drift:ui-copy`), not one per changed-file set. Touch 6 files in one domain over a task and it's still one candidate, not 7. A resolved candidate reopens only when its rule fires on genuinely new evidence (its `EvidenceKey` changes).
+- Committing is not resolving — unhandled high-risk candidates survive the commit.
 - Flipping a status without writing a real reason doesn't count; the next scan reverts it.
-- Handled items move to an archive at the bottom of the file — history stays readable, and a rejected one won't keep coming back.
+- Handled items move to an archive at the bottom of the file — the last 30 decisions stay readable, and a rejected one won't keep coming back.
+- `.agent/rule-candidates.md` is a local working inbox; gitignore it (below) so its churn never lands in commits or a fresh clone.
 - Dependency and build output (`node_modules/`, `dist/`, …) never produces candidates, and the installer resolves the ones its own files trigger — what a fresh inbox holds is only what the scan found in *your* project (detected commands, old backups), for the adaptation pass to verify.
 
 When the rules themselves start to feel noisy or stale, `.agent/rule-health.md` is the guide for pruning, merging, or deleting. This is meant to stay small, not grow into an encyclopedia.
@@ -145,21 +148,21 @@ Honesty about enforcement matters more than the appearance of it. The exact spli
 
 | Mechanism | Fires on | Blocks? |
 | --- | --- | --- |
-| Bash guard (PreToolUse, both tools) | force push; `git reset --hard`; `rm -rf` (except rebuildable dirs like `node_modules`, `dist`); release/deploy/publish/submit commands, including wrapped forms like `npx vercel deploy` and `sh -c "npm publish"`; commands that change production state; destructive SQL through a real database CLI (`psql`, `mysql`) | **Yes** — exit 2; bypass `RULES_HOOK_ALLOW_RISK=1` |
-| Stop gate (both tools) | unhandled candidates in the inbox, whether from the current diff or committed earlier | **Yes** — lists the pending IDs and the re-check command; a Stop block means "keep going and fix this", not "halt"; bypass `RULES_HOOK_ALLOW_PENDING=1` |
-| Doc-drift report | on demand; also shown when the Stop gate blocks on current changes | No — advisory list of docs to review |
+| Bash guard (PreToolUse, both tools) | force push (incl. `git push origin +main`); `git reset --hard`; `rm -rf` (except rebuildable dirs like `node_modules`, `dist`); a curated set of release/deploy/publish commands (npm/pnpm/yarn/bun publish, `npx vercel deploy`, `sh -c "npm publish"`, fastlane, gh release, …) — a named allowlist, not every publisher; destructive SQL through a real database CLI (`psql`, `mysql`), including heredoc bodies; dangerous commands hidden in `$(…)`/backticks | **Yes** — exit 2; fails closed on unparseable input; bypass `RULES_HOOK_ALLOW_RISK=1` |
+| Stop gate (both tools) | unhandled **high-risk** (`risk:*`) candidates — secrets, billing, release, production — whether from the current diff or committed earlier; drift/command candidates are advisory and do not block | **Yes** — lists the pending high-risk IDs and the re-check command; a Stop block means "keep going and fix this", not "halt"; bypass `RULES_HOOK_ALLOW_PENDING=1` |
+| Doc-drift report | on demand; also shown when the Stop gate blocks | No — advisory list of docs to review |
 | Drift-map self-check | after adaptation, a path in the map matches no file in the repo — usually a renamed directory | No — one-line warning that the map itself went stale |
 | Codex domain router (PostToolUse) | first edit touching a mapped area | No — one-line pointer |
 | Everything else — quality loops, source-of-truth order, workflows | the written agreement | No — agent judgment, by design |
 
-So only two things ever block: the narrow bash guard and the Stop gate. "Don't trust stale docs" and "finish the whole job" hold because the agent keeps the agreement — the rules make the right moment easy to catch; they don't prove correctness. The Stop gate carries an anti-loop switch (`stop_hook_active`), so it can never block forever.
+So only two things ever block, and both are narrow: the bash guard (a small set of high-risk commands) and the Stop gate (high-risk candidates only). "Don't trust stale docs" and "finish the whole job" hold because the agent keeps the agreement — the rules make the right moment easy to catch; they don't prove correctness. The Stop gate carries an anti-loop switch (`stop_hook_active`), so it can never block forever. The bash guard fails closed: if it can't parse a command, it blocks rather than waving it through.
 
 ## The token cost
 
 Rules that flood the context hurt more than they help. So:
 
 - **Always loaded: one ~35-line `AGENTS.md`.** That's the entire fixed cost.
-- Domain docs load **only when their files are touched** — Claude via pointers that auto-load on read, Codex via the same pointer injected after an edit (once per area per session).
+- Domain docs load **only when their files are touched** — the reliable path is the hand-kept `.agent/index.md` routing map plus `python3 scripts/check-doc-drift.py`, which mechanically lists the docs mapped to your actual diff. Claude's `.claude/rules/` pointers and Codex's after-edit router are a bonus on top; note that `.claude/rules/` file-scoped auto-loading has known upstream bugs in some Claude Code versions (loads everything, or never fires), so don't rely on it as the only mechanism.
 - Skills expand **only when invoked**; at the end of a task the scripts mechanically list which docs map to the actual diff, and the agent reads that list — not the whole directory.
 
 An ordinary task costs the agreement itself, the domains it actually touched, plus a fixed end-of-task check (a couple of thousand tokens regardless of task size). Matching is word-boundary precise: `ProductCard.tsx` won't trip the production rule just for containing "prod".
@@ -208,11 +211,12 @@ CLAUDE.md                     thin Claude entrypoint, imports @AGENTS.md
 scripts/*.py                  bootstrap-project-context, check-doc-drift, suggest-rule-updates
 ```
 
-Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, `scripts/`. Keep `.agent/work/*` (handoff notes) local unless you intend to share them:
+Recommended to commit: `AGENTS.md`, `CLAUDE.md`, `.agent/`, `.agents/`, `.claude/`, `.codex/`, `scripts/`. Keep `.agent/work/*` (handoff notes) and `.agent/rule-candidates.md` (the local candidate inbox the scripts rewrite on every finalize) local:
 
 ```gitignore
 .agent/work/*
 !.agent/work/README.md
+.agent/rule-candidates.md
 ```
 
 </details>

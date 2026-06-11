@@ -43,14 +43,15 @@ Canonical finalize protocol. Other docs point here; do not restate it elsewhere.
 1. Apply `.agent/quality-gates.md` to the affected loops; choose evidence with `.agent/verification-map.md` and commands from `.agent/command-contract.md`.
 2. Run `python3 scripts/check-doc-drift.py` — advisory list of shared docs mapped to your diff (policy: `.agent/doc-drift.md`).
 3. Run `python3 scripts/suggest-rule-updates.py` — regenerates the candidate inbox `.agent/rule-candidates.md`.
-4. Resolve every pending candidate with one of four statuses plus a real decision note: `promoted` (fact written into the right `.agent/*` doc), `checked-unchanged`, `rejected`, or `needs-user` (high-risk, unprovable from repo/tool evidence).
+4. The Stop gate blocks finalization only on pending high-risk (`risk:*`) candidates — secrets, billing, release, production. Resolve those with one of four statuses plus a real decision note: `promoted` (fact written into the right `.agent/*` doc), `checked-unchanged`, `rejected`, or `needs-user` (high-risk, unprovable from repo/tool evidence). Drift and command candidates are advisory — resolve when useful; they never block.
 
 Inbox semantics that matter:
 
 - A status flipped without a real decision note reverts to pending on the next scan.
 - Resolved candidates move to the compact archive section of `.agent/rule-candidates.md` (the audit trail); rejected items stay suppressed.
-- Pending candidates carry forward across regeneration, commits, and handoffs. Committing does not clear them; the Stop gate blocks on committed-but-pending items too.
-- New evidence for the same rule (`<id>@<evidence-key>`) resets the candidate to pending — no status inheritance.
+- High-risk candidates carry forward across regeneration, commits, and handoffs. Committing does not clear them.
+- One candidate per rule (`risk:billing`, `drift:ui-copy`) — a stable id, not one per changed-file set. It reopens only when the rule fires on genuinely new evidence (its `EvidenceKey` changes).
+- `.agent/rule-candidates.md` is a local working inbox; gitignore it (see README) so its churn never lands in commits.
 
 Full engine mechanics: `.agent/doc-drift.md`.
 

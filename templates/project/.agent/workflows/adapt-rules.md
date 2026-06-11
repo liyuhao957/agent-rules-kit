@@ -13,9 +13,8 @@ MUST be done before marking `Status: adapted`:
 - `.agent/command-contract.md`: every row verified by running or locating the command in the current repo.
 - `.agent/drift-map.yml`: globs tightened to this project's real paths AND dead/unused default globs deleted; changes mirrored into `.claude/rules/*.md` frontmatter.
 - `.agent/rule-candidates.md`: every candidate resolved with real decision notes.
-- Adaptation checklist boxes ticked only for items actually performed.
 
-MAY be deferred with explicit `needs-user:` entries in `.agent/adaptation-review.md`: `.agent/product-invariants.md`, `.agent/user-journeys.md`. Deferring honestly is fine; ticking boxes for work not done is not.
+`.agent/product-invariants.md` and `.agent/user-journeys.md` MAY be deferred when current code does not yet prove their content. Deferring is NOT leaving the template in place: replace the template body (the `Replace this template` / `project-specific` lines the validator flags) with a one-line `needs-user: <what is still unverified>` note, and record the same note under "Unverified / Needs User Confirmation" in `.agent/adaptation-review.md`. A deferred-and-noted file is handled, so its checklist box is ticked. Never tick a box for a file still carrying the raw template, and never leave the raw template behind — those are the only two dishonest moves here.
 
 ## Steps
 
@@ -43,6 +42,7 @@ MAY be deferred with explicit `needs-user:` entries in `.agent/adaptation-review
    - `.agent/command-contract.md`
    - relevant `.agent/domains/*`
    - `.agent/drift-map.yml` — tighten the default globs to this project's real paths, delete defaults that match nothing here, then mirror them into `.claude/rules/*.md` frontmatter so Claude's auto-loading stays in step
+   - Prune domains this project does not have. The defaults are consumer-app shaped; a CLI/library/backend/ML repo usually has no `ui-copy`, `localization`, or `release`-to-store domain. For each dead domain, delete all three together: `.agent/domains/<name>.md`, `.claude/rules/<name>.md`, and its rule block in `.agent/drift-map.yml` (and drop its line from `.agent/index.md`). The validator accepts a pruned set; carrying dead domains is permanent noise.
 8. Put unverified, risky, remote, credential, device, pricing, production, or release facts into `.agent/adaptation-review.md` under "Unverified / Needs User Confirmation".
 9. Mark `.agent/adaptation-review.md`:
    - `Status: adapted`

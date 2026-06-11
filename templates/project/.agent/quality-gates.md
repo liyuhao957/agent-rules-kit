@@ -45,4 +45,4 @@ Use these gates before finalizing implementation, review, continuation, or relea
 
 ## Rule Growth Loop
 
-- Resolve the candidate inbox before finalizing non-trivial work: protocol in `.agent/index.md` (At Finalize).
+- Resolve pending high-risk (`risk:*`) candidates before finalizing — those block the Stop gate. Drift and command candidates are advisory; resolve them when useful. Protocol in `.agent/index.md` (At Finalize).

@@ -187,7 +187,19 @@ def main() -> int:
 
     save_seen(state, seen)
     context = "Rules router: your edit touched mapped areas — " + "; ".join(pointers) + ". Verify doc claims against current code."
-    print(json.dumps({"additionalContext": context}))
+    # Current Codex (and Claude Code) read additionalContext only under
+    # hookSpecificOutput and reject unknown top-level fields, so a bare
+    # {"additionalContext": ...} is silently dropped. Emit the nested shape.
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": context,
+                }
+            }
+        )
+    )
     return 0
 
 

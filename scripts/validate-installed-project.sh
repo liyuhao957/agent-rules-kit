@@ -44,7 +44,7 @@ fi
 target="$(cd "$target" && pwd)"
 rules_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-bash "$rules_root/scripts/validate-rules-template.sh" "$target"
+bash "$rules_root/scripts/validate-rules-template.sh" "$target" --installed
 
 if [[ ! -f "$target/.agent/rules-kit.json" ]]; then
   echo "FAIL: missing .agent/rules-kit.json" >&2

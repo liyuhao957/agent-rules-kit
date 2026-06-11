@@ -117,6 +117,7 @@ rules:
   - name: data-sync
     paths:
       - "db/**"
+      - "**/db/**"
       - "prisma/**"
       - "drizzle/**"
       - "supabase/migrations/**"
@@ -126,14 +127,24 @@ rules:
       - "**/Schema/**"
       - "**/migrations/**"
       - "**/Migrations/**"
+      - "**/migrate/**"
       - "**/stores/**"
       - "**/Stores/**"
+      - "**/store/**"
+      - "**/Store/**"
+      - "**/repository/**"
+      - "**/repositories/**"
+      - "**/Repository/**"
+      - "**/Repositories/**"
+      - "**/dao/**"
+      - "**/*_repo.go"
+      - "**/*Repository.*"
       - "**/*.sql"
       - "**/*.xcdatamodeld/**"
     docs:
       - ".agent/domains/data-sync.md"
       - ".agent/quality-gates.md"
-    reason: "Data lifecycle, persistence, sync, backup, or destructive behavior may have changed."
+    reason: "Data lifecycle, persistence, sync, backup, or destructive behavior may have changed (incl. backend store/repository/dao layers)."
 
   - name: build-test
     paths:

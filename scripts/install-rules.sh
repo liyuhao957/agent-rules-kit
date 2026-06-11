@@ -158,6 +158,18 @@ fi
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 metadata="$target/.agent/rules-kit.json"
 
+# A timestamp has second granularity, so two installs in the same second would
+# share a backup dir and the second would overwrite the first's saved files
+# (losing the user's originals). Return a path that does not yet exist.
+unique_dir() {
+  local base="$1" candidate="$1" n=2
+  while [[ -e "$candidate" ]]; do
+    candidate="${base}-${n}"
+    n=$((n + 1))
+  done
+  printf '%s' "$candidate"
+}
+
 run() {
   if [[ "$dry_run" -eq 1 ]]; then
     printf '[dry-run] %q' "$1"
@@ -172,7 +184,7 @@ run() {
 }
 
 if [[ "$upgrade" -eq 1 ]]; then
-  backup_dir="$target/.rules-kit/backups/rules-upgrade-$timestamp"
+  backup_dir="$(unique_dir "$target/.rules-kit/backups/rules-upgrade-$timestamp")"
   echo "Upgrading Relay Rules tooling to $version in $target"
 
   # Kit machinery only. Agent-adapted content (.agent/product-invariants.md,
@@ -344,6 +356,13 @@ except Exception:
     if [[ -z "$installed_at" ]]; then
       installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     fi
+    # Preserve the pre-install snapshot reference across upgrades.
+    pre_install_backup_json="$(python3 -c 'import json, sys
+try:
+    v = json.load(open(sys.argv[1])).get("preInstallBackup")
+    print(json.dumps(v) if isinstance(v, str) else "null")
+except Exception:
+    print("null")' "$metadata")"
     cat > "$metadata" <<EOF
 {
   "rulesKitVersion": "$version",
@@ -352,6 +371,7 @@ except Exception:
   "source": "$rules_root",
   "template": "templates/project",
   "managedPaths": $managed_paths_json,
+  "preInstallBackup": $pre_install_backup_json,
   "backup": "$backup_dir"
 }
 EOF
@@ -390,23 +410,51 @@ EOF
   exit 0
 fi
 
-backup_dir="$target/.rules-kit/backups/rules-install-$timestamp"
+backup_dir="$(unique_dir "$target/.rules-kit/backups/rules-install-$timestamp")"
+backup_rel="${backup_dir#"$target"/}"
 
 echo "Installing Relay Rules $version into $target"
 
-if [[ ${#existing[@]} -gt 0 && "$backup" -eq 1 ]]; then
-  echo "Backing up existing rule paths to $backup_dir"
-  if [[ "$dry_run" -ne 1 ]]; then
-    mkdir -p "$backup_dir"
+# Capture the prior install's authoritative pre-install reference BEFORE the
+# backup loop moves .agent away. Set once, at the first install; a later
+# --force reinstall must preserve it, because that reinstall's own backup holds
+# kit files, not the user's original files. Empty string = no prior metadata.
+prior_pre_install_json=""
+if [[ -f "$metadata" ]]; then
+  prior_pre_install_json="$(python3 -c 'import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+except Exception:
+    print(""); sys.exit()
+if "preInstallBackup" in data:
+    v = data["preInstallBackup"]
+    print(json.dumps(v) if isinstance(v, str) else "null")
+else:
+    print("")' "$metadata")"
+fi
+
+# --force replaces existing managed paths (factory reset). Existing paths are
+# always REMOVED first so stale kit files never survive a reinstall; backing
+# them up is the default and --no-backup opts out of the copy, not the removal.
+if [[ ${#existing[@]} -gt 0 ]]; then
+  if [[ "$backup" -eq 1 ]]; then
+    echo "Backing up existing rule paths to $backup_dir"
+    [[ "$dry_run" -eq 1 ]] || mkdir -p "$backup_dir"
   fi
   for path in "${existing[@]}"; do
-    parent="$(dirname "$backup_dir/$path")"
     if [[ "$dry_run" -eq 1 ]]; then
-      echo "[dry-run] mkdir -p $parent"
-      echo "[dry-run] mv $target/$path $backup_dir/$path"
-    else
-      mkdir -p "$parent"
+      if [[ "$backup" -eq 1 ]]; then
+        echo "[dry-run] mv $target/$path $backup_dir/$path"
+      else
+        echo "[dry-run] rm -rf $target/$path"
+      fi
+      continue
+    fi
+    if [[ "$backup" -eq 1 ]]; then
+      mkdir -p "$(dirname "$backup_dir/$path")"
       mv "$target/$path" "$backup_dir/$path"
+    else
+      rm -rf "$target/$path"
     fi
   done
 fi
@@ -433,6 +481,17 @@ else
     "$target/.claude/hooks/"*.py 2>/dev/null || true
 fi
 
+# The pre-install snapshot: reuse the prior install's reference verbatim (it
+# already captured the true pre-kit state, or recorded null for greenfield);
+# otherwise this run's backup is that snapshot. null = nothing predated the kit.
+if [[ -n "$prior_pre_install_json" ]]; then
+  pre_install_backup_json="$prior_pre_install_json"
+elif [[ ${#existing[@]} -gt 0 && "$backup" -eq 1 ]]; then
+  pre_install_backup_json="\"$backup_rel\""
+else
+  pre_install_backup_json="null"
+fi
+
 if [[ "$dry_run" -eq 1 ]]; then
   echo "[dry-run] write $metadata"
 else
@@ -443,6 +502,7 @@ else
   "source": "$rules_root",
   "template": "templates/project",
   "managedPaths": $managed_paths_json,
+  "preInstallBackup": $pre_install_backup_json,
   "backup": $(if [[ ${#existing[@]} -gt 0 && "$backup" -eq 1 ]]; then printf '"%s"' "$backup_dir"; else printf 'null'; fi)
 }
 EOF

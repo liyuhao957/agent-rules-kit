@@ -16,9 +16,9 @@ Shared entrypoint for Codex, Claude Code (via `CLAUDE.md`), and any coding agent
 
 ## Finalize
 
-- Apply `.agent/quality-gates.md`: done means the affected loops are closed or explicitly marked unverified. Two loops never skip — drift (durable facts changed → shared docs updated or called out) and rule growth (no pending candidates).
-- Run `python3 scripts/suggest-rule-updates.py`; resolve every candidate in `.agent/rule-candidates.md` as `promoted`, `checked-unchanged`, `rejected`, or `needs-user`, each with a real decision note.
-- Pending candidates carry forward: committing does not clear them, and the Stop gate blocks on committed-but-pending items too. Full protocol: `.agent/index.md` (At Finalize).
+- Apply `.agent/quality-gates.md`: done means the affected loops are closed or explicitly marked unverified. Two loops never skip — drift (durable facts changed → shared docs updated or called out) and rule growth (resolve what the scanner surfaces).
+- Run `python3 scripts/suggest-rule-updates.py`. The Stop gate blocks finalization only on pending high-risk (`risk:*`) candidates — secrets, billing, release, production. Resolve those as `promoted`, `checked-unchanged`, `rejected`, or `needs-user`, each with a real decision note. Drift and command candidates are advisory: resolve them when useful, but they do not block.
+- High-risk candidates carry forward: committing does not clear them. Full protocol: `.agent/index.md` (At Finalize).
 
 ## Cross-Agent Handoff
 

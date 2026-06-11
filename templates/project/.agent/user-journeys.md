@@ -2,7 +2,7 @@
 
 List the core user paths that future agents must consider when making changes.
 
-Each journey should be short and verifiable.
+Each journey should be short and verifiable. If current code does not yet prove these journeys, replace the placeholder lines below with a single `needs-user: <what is unverified>` note and record it in `.agent/adaptation-review.md` rather than leaving the placeholders in place.
 
 ## Template
 

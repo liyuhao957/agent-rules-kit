@@ -14,8 +14,8 @@ Usage: uninstall-rules.sh --target <project-root> [--dry-run]
 
 Lossless uninstall. Nothing is deleted, only moved:
   1. Every kit-managed path is moved into .rules-kit/backups/rules-uninstall-<timestamp>/.
-  2. Files you had before the first install are restored from the earliest
-     rules-install-* backup.
+  2. Files you had before the first install are restored from the pre-install
+     snapshot the installer recorded (none for a greenfield install).
   3. Files in the uninstall backup that carry your content (adapted project
      facts, your own files inside kit directories) are listed for review —
      take back what you still need.
@@ -74,7 +74,22 @@ managed_paths=(
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="$target/.rules-kit/backups/rules-uninstall-$timestamp"
-earliest="$(find "$target/.rules-kit/backups" -maxdepth 1 -type d -name 'rules-install-*' 2>/dev/null | sort | head -n1)"
+
+# The installer records, once, the authoritative snapshot of files that existed
+# before the kit was ever installed (null/absent = greenfield, nothing to
+# restore). This is read BEFORE step 1 moves .agent away. It replaces the old
+# "earliest rules-install-* backup" guess, which wrongly restored a prior kit
+# install's own files after a --force reinstall.
+pre_install_rel="$(python3 -c 'import json, sys
+try:
+    v = json.load(open(sys.argv[1])).get("preInstallBackup")
+    print(v if isinstance(v, str) else "")
+except Exception:
+    print("")' "$target/.agent/rules-kit.json")"
+restore_from=""
+if [[ -n "$pre_install_rel" && -d "$target/$pre_install_rel" ]]; then
+  restore_from="$target/$pre_install_rel"
+fi
 
 echo "Uninstalling Relay Rules from $target"
 
@@ -95,17 +110,17 @@ if [[ "$dry_run" -ne 1 ]]; then
   rmdir "$target/scripts" 2>/dev/null || true
 fi
 
-# 2. Restore what existed before the first install.
-if [[ -n "$earliest" ]]; then
+# 2. Restore what existed before the first install (authoritative snapshot).
+if [[ -n "$restore_from" ]]; then
   if [[ "$dry_run" -eq 1 ]]; then
-    echo "[dry-run] restore your pre-install files from $earliest"
+    echo "[dry-run] restore your pre-install files from $restore_from"
   else
-    cp -R "$earliest"/. "$target"/
-    echo "Restored your pre-install files from $earliest:"
-    (cd "$earliest" && find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' | sed 's|^\./|  - |')
+    cp -R "$restore_from"/. "$target"/
+    echo "Restored your pre-install files from $restore_from:"
+    (cd "$restore_from" && find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' | sed 's|^\./|  - |')
   fi
 else
-  echo "No rules-install-* backup found; nothing predated the install (or it was installed with --no-backup)."
+  echo "No pre-install snapshot recorded; nothing to restore (greenfield install, --no-backup, or installed before this was tracked). Check $target/.rules-kit/backups/ for any rules-install-* backup."
 fi
 
 if [[ "$dry_run" -eq 1 ]]; then

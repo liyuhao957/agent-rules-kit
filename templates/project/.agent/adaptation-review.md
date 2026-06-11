@@ -14,9 +14,9 @@ This file tracks the agent-owned step after installing Rules. Installation and b
 - [ ] Reviewed old rule backups under `.rules-kit/backups/` when present.
 - [ ] Promoted verified command candidates into `.agent/command-contract.md` or marked them unverified below.
 - [ ] Reviewed generated candidates in `.agent/drift-map.yml`, removed or adjusted noisy entries, and mirrored final globs into `.claude/rules/*.md` frontmatter.
-- [ ] Updated `.agent/product-invariants.md`, `.agent/user-journeys.md`, and relevant `.agent/domains/*` files with confirmed durable facts.
+- [ ] Updated `.agent/product-invariants.md`, `.agent/user-journeys.md`, and relevant `.agent/domains/*` with confirmed facts, or replaced their template body with a `needs-user:` deferral note (no raw template left behind).
 - [ ] Listed facts that cannot be verified from code/config/tool output under "Unverified / Needs User Confirmation".
-- [ ] Ran `bash <rules-kit-source>/scripts/validate-installed-project.sh <project-root> --require-adapted` (the kit source path is recorded in `.agent/rules-kit.json`).
+- [ ] Ran `bash <rules-kit-source>/scripts/validate-installed-project.sh <project-root> --require-adapted --require-candidates-reviewed` (the kit source path is recorded in `.agent/rules-kit.json`).
 
 ## Confirmed Project Facts
 
