@@ -16,6 +16,9 @@ import sys
 from pathlib import Path
 
 
+STALE_GLOB_LIMIT_PER_RULE = 5
+
+
 def run_git(args: list[str]) -> list[str]:
     result = subprocess.run(
         ["git", *args],
@@ -181,10 +184,17 @@ def main() -> int:
     rules = parse_drift_map(Path(args.map))
 
     if not args.quiet:
+        stale_by_rule: dict[str, list[str]] = {}
         for rule_name, pattern in stale_globs(rules):
+            stale_by_rule.setdefault(rule_name, []).append(pattern)
+        for rule_name, patterns in stale_by_rule.items():
+            shown = patterns[:STALE_GLOB_LIMIT_PER_RULE]
+            suffix = f" (+{len(patterns) - len(shown)} more)" if len(patterns) > len(shown) else ""
+            joined = ", ".join(f"`{pattern}`" for pattern in shown)
             print(
-                f"Drift-map warning: [{rule_name}] glob `{pattern}` matches no tracked file — "
-                "the map may be stale (renamed directory?). Update .agent/drift-map.yml and mirror .claude/rules/*.md."
+                f"Drift-map warning: [{rule_name}] {len(patterns)} glob(s) match no tracked file: "
+                f"{joined}{suffix} — the map may be stale (renamed directory?). "
+                "Update .agent/drift-map.yml and mirror .claude/rules/*.md."
             )
 
     if not files:
@@ -227,4 +237,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

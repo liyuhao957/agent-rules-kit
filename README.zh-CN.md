@@ -225,7 +225,7 @@ scripts/*.py                  bootstrap-project-context、check-doc-drift、sugg
 <summary><strong>完整生命周期：安装 → 初始扫描 → 适配 → 校验 → 生长</strong></summary>
 
 1. **安装** —— `agent-install-rules.sh` 拷贝模板，以 Claude 技能树为准生成 Codex 技能树，在 `.agent/rules-kit.json` 记录元数据，备份已有规则文件，并运行初始扫描。此时项目是「已安装」，不是「已适配」：`.agent/adaptation-review.md` 仍是 `Status: pending`。
-2. **初始扫描（bootstrap）** —— `bootstrap-project-context.py` 扫描当前文件/配置，写下的是**线索，不是结论**：写进 `project-map.md`、`command-contract.md`、`bootstrap-report.md` 和 `rule-candidates.md`，另在 `drift-map.yml` 和 `adaptation-review.md` 里留下标记清楚的生成区块，等 agent 收紧确认。一个叫 `sync.ts` 的文件是*信号*，不是「云同步已核实」的证明。
+2. **初始扫描（bootstrap）** —— `bootstrap-project-context.py` 扫描当前文件/配置，写下的是**线索，不是结论**：写进 `project-map.md`、`command-contract.md`、`bootstrap-report.md` 和 `rule-candidates.md`，另在 `drift-map.yml`、`.claude/rules/*.md` 和 `adaptation-review.md` 里留下标记清楚的生成区块，等 agent 收紧确认。项目标成 `Status: adapted` 后，bootstrap 不再改 drift/routing 映射，只刷新证据文件。一个叫 `sync.ts` 的文件是*信号*，不是「云同步已核实」的证明。
 3. **适配**（agent 驱动）—— 按 `.agent/workflows/adapt-rules.md`，agent 检查当前代码、配置、测试和旧备份，只把**核实过的事实**写进 `.agent/*`，把 drift-map 的 glob 收紧到项目真实路径，并镜像进 `.claude/rules/*`。无法证明的高风险事实标 `needs-user`。
 4. **校验** —— `validate-installed-project.sh` 检查结构齐全、`CLAUDE.md` 导入了 `@AGENTS.md`、Codex 技能树与 Claude 那份一致、脚本可执行，以及（带严格参数时）适配状态、占位符和候选都已处理。查形式，不查正确性。
 5. **生长**（agent 驱动）—— 代码变化时，两个扫描脚本浮出可能过时的文档和新的候选；agent 逐条查实、确认未变、拒绝，或标 `needs-user`。

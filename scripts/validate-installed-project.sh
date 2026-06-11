@@ -114,7 +114,7 @@ def parse_drift_map(path: Path) -> list[dict[str, object]]:
         if re.match(r"^\s*-\s+name:\s*", line):
             if current:
                 rules.append(current)
-            current = {"name": line.split("name:", 1)[1].strip().strip('"'), "paths": []}
+            current = {"name": line.split("name:", 1)[1].strip().strip('"'), "paths": [], "docs": []}
             active = None
             continue
         if current is None:
@@ -126,8 +126,8 @@ def parse_drift_map(path: Path) -> list[dict[str, object]]:
         if stripped.startswith("reason:"):
             active = None
             continue
-        if stripped.startswith("- ") and active == "paths":
-            current["paths"].append(stripped[2:].strip().strip('"'))  # type: ignore[union-attr]
+        if stripped.startswith("- ") and active in {"paths", "docs"}:
+            current[active].append(stripped[2:].strip().strip('"'))  # type: ignore[index]
     if current:
         rules.append(current)
     return rules
@@ -167,11 +167,33 @@ for pointer in pointer_files:
 for rule in rules:
     pointer = rules_dir / f"{rule['name']}.md"
     if not pointer.is_file():
-        continue
-    pointer_globs = set(frontmatter_globs(pointer))
+        pointer_globs = set()
+    else:
+        pointer_globs = set(frontmatter_globs(pointer))
     for glob in rule["paths"]:  # type: ignore[union-attr]
-        if glob not in pointer_globs:
+        if pointer.is_file() and glob not in pointer_globs:
             problems.append(f"drift-map rule `{rule['name']}`: glob `{glob}` missing from .claude/rules/{pointer.name}")
+
+    # Project-specific bootstrap rules are named project-* and point at one or
+    # more domain docs (for example .agent/domains/ui-copy.md). They still need
+    # Claude path routing, even though there is no .claude/rules/project-ui.md.
+    domain_pointers = []
+    for doc in rule.get("docs", []):
+        doc = str(doc)
+        prefix = ".agent/domains/"
+        suffix = ".md"
+        if doc.startswith(prefix) and doc.endswith(suffix):
+            domain_pointers.append(rules_dir / f"{doc[len(prefix):-len(suffix)]}.md")
+    if not domain_pointers:
+        continue
+    covered = set()
+    for domain_pointer in domain_pointers:
+        if domain_pointer.is_file():
+            covered.update(frontmatter_globs(domain_pointer))
+    for glob in rule["paths"]:  # type: ignore[union-attr]
+        if glob not in covered:
+            names = ", ".join(f".claude/rules/{p.name}" for p in domain_pointers)
+            problems.append(f"drift-map rule `{rule['name']}`: glob `{glob}` missing from domain pointer frontmatter ({names})")
 
 if problems:
     print("WARN: .agent/drift-map.yml and .claude/rules/*.md frontmatter globs have diverged; mirror them (see .claude/rules/rules-kit.md):")
